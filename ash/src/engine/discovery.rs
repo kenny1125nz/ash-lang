@@ -368,7 +368,7 @@ fn parse_yaml_array(s: &str) -> Vec<String> {
         .collect()
 }
 
-/// Parse `ash-project.yaml` and return the list of configured agents.
+/// Parse `ash.yaml` and return the list of configured agents.
 ///
 /// Supports both the old format with `driver:` (backward compat) and the new
 /// format with structured fields (`cmd`, `args`, `model_flag`, etc.).

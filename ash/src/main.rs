@@ -118,20 +118,23 @@ fn validate_agents(script: &Script) -> Result<(), String> {
         return Ok(());
     }
 
-    let config_path = std::path::Path::new("ash-project.yaml");
-    if !config_path.exists() {
-        eprintln!(
-            "warning: script references agent(s) ({}) but no ash-project.yaml found — \
-             agent names will be resolved against the default registry",
-            used_agents.iter().map(|s| format!("'{}'", s)).collect::<Vec<_>>().join(", ")
-        );
-        return Ok(());
-    }
+    let config_path = resolve_config_path();
+    let config_path_str = match config_path {
+        Some(ref p) => p.to_str().unwrap().to_string(),
+        None => {
+            eprintln!(
+                "warning: script references agent(s) ({}) but no ash.yaml found — \
+                 agent names will be resolved against the default registry",
+                used_agents.iter().map(|s| format!("'{}'", s)).collect::<Vec<_>>().join(", ")
+            );
+            return Ok(());
+        }
+    };
 
-    let configured = match engine::read_config("ash-project.yaml") {
+    let configured = match engine::read_config(&config_path_str) {
         Ok(agents) => agents.into_iter().map(|a| a.name).collect::<HashSet<_>>(),
         Err(e) => {
-            return Err(format!("failed to read ash-project.yaml: {}", e));
+            return Err(format!("failed to read {}: {}", config_path_str, e));
         }
     };
 
@@ -144,10 +147,11 @@ fn validate_agents(script: &Script) -> Result<(), String> {
 
     if !unknown.is_empty() {
         return Err(format!(
-            "agents not configured in ash-project.yaml: {}\n\
+            "agents not configured in {}: {}\n\
              hint: add them under the 'agents:' section, e.g.:\n\
              agents:\n\
              {}",
+            config_path_str,
             unknown.iter().map(|s| format!("'{}'", s)).collect::<Vec<_>>().join(", "),
             unknown.iter().map(|s| format!("  {}:\n    type: local-cli\n    cmd: <binary>\n", s)).collect::<Vec<_>>().join("")
         ));
@@ -171,6 +175,29 @@ fn parse_agent_spec(spec: Option<&str>) -> (String, String) {
     (agent, model)
 }
 
+fn global_config_dir() -> std::path::PathBuf {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".to_string());
+    std::path::PathBuf::from(home).join(".ash")
+}
+
+fn global_config_path() -> std::path::PathBuf {
+    global_config_dir().join("ash.yaml")
+}
+
+fn resolve_config_path() -> Option<std::path::PathBuf> {
+    let cwd = std::path::Path::new("ash.yaml");
+    if cwd.exists() {
+        return Some(cwd.to_path_buf());
+    }
+    let global = global_config_path();
+    if global.exists() {
+        return Some(global);
+    }
+    None
+}
+
 fn cmd_discover(args: &[String]) -> i32 {
     let mut write = false;
     let mut force = false;
@@ -185,8 +212,8 @@ fn cmd_discover(args: &[String]) -> i32 {
     let result = engine::discover();
 
     if write {
-        match engine::write_config("ash-project.yaml", &result, force) {
-            Ok(()) => println!("Generated ash-project.yaml"),
+        match engine::write_config("ash.yaml", &result, force) {
+            Ok(()) => println!("Generated ash.yaml"),
             Err(e) => {
                 eprintln!("error: {}", e);
                 return 1;
@@ -200,20 +227,32 @@ fn cmd_discover(args: &[String]) -> i32 {
 
 fn ensure_agents_registered() {
     engine::register_defaults();
-    if std::path::Path::new("ash-project.yaml").exists() {
-        match engine::read_config("ash-project.yaml") {
+
+    if let Some(config_path) = resolve_config_path() {
+        match engine::read_config(config_path.to_str().unwrap()) {
             Ok(agents) => {
                 for config in agents {
                     let adapter = engine::from_config(&config);
                     engine::register(&config.name, adapter);
                 }
+                return;
             }
-            Err(e) => eprintln!("warning: failed to read ash-project.yaml: {}", e),
+            Err(e) => eprintln!("warning: failed to read config: {}", e),
         }
-    } else {
-        let result = engine::discover_and_register();
-        let summary = engine::discovery_summary(&result);
-        eprintln!("{}", summary);
+    }
+
+    let result = engine::discover_and_register();
+    let summary = engine::discovery_summary(&result);
+    eprintln!("{}", summary);
+
+    let dir = global_config_dir();
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        eprintln!("warning: failed to create {}: {}", dir.display(), e);
+        return;
+    }
+    let path = dir.join("ash.yaml");
+    if let Err(e) = engine::write_config(path.to_str().unwrap(), &result, false) {
+        eprintln!("warning: failed to save config: {}", e);
     }
 }
 
