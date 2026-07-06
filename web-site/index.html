@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ash — Agent Shell Language</title>
+  <title>Ash — Task Runner for AI Agents</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,600;0,700;1,400&display=swap"
     rel="stylesheet">
@@ -15,62 +15,167 @@
 
   <header>
     <div class="container">
-      <div class="logo"><span>ash</span> lang</div>
+      <div class="logo"><span>ash</span></div>
       <nav>
+        <a href="#how-it-works">How it works</a>
         <a href="#playground">Playground</a>
-        <a href="https://github.com/agentic-coding/ash" target="_blank">GitHub</a>
+        <a href="https://github.com/kenny1125nz/ash-lang" target="_blank">GitHub</a>
       </nav>
     </div>
   </header>
 
   <section class="hero">
     <div class="container">
-      <h1>Deterministic scripts.<br><span>AI-powered steps.</span></h1>
-      <p>Ash is a scripting language where the control flow is rigid and the steps are intelligent. Sequencing,
-        branching, retry limits — defined in code. Each step executes autonomously by an AI agent.
-        <br>Designed to be readable enough that non-programmers can automate their daily routines.</p>
+      <h1>Task runner for<br><span>AI agents</span></h1>
+      <p>Drop markdown files in a folder, number them, and run. Each file is one task sent to an AI agent. When you need loops, retries, or conditional logic — add an <code>.ash</code> script. Start simple. Grow as needed.</p>
       <div class="btns">
-        <a href="#playground" class="btn btn-primary">Try the Playground</a>
-        <a href="https://github.com/agentic-coding/ash" class="btn" target="_blank">GitHub</a>
+        <a href="#how-it-works" class="btn btn-primary">How it works</a>
+        <a href="https://github.com/kenny1125nz/ash-lang" class="btn" target="_blank">GitHub</a>
       </div>
     </div>
   </section>
 
-  <section class="pain-points">
+  <section class="pain-points" id="how-it-works">
     <div class="container">
-      <h2 class="section-title">Why a language for agent workflows?</h2>
-      <p class="section-desc">AI agents are powerful, but letting them drive the entire workflow — deciding what to do
-        next, how many times to retry, when to stop — burns tokens on decisions that should be deterministic.</p>
-      <div class="pain-grid">
-        <div class="pain-card">
-          <h3>Workflows as Code</h3>
-          <p>Any multi-step process — review content, generate a report, audit compliance, publish an update — should
-            live in a file you commit, version, share, and rerun. Not buried in a chat thread.</p>
+      <h2 class="section-title">How Ash Works</h2>
+      <p class="section-desc">Ash runs a folder of markdown files through AI agents in numbered order — no scripting required. Each file is a task. Frontmatter sets the agent and model. Output flows between steps.</p>
+
+      <div class="code-compare" style="margin-top:32px">
+        <div class="code-compare-card highlight" style="max-width:100%">
+          <h3>tasks/</h3>
+          <div class="cmp-badge">$ ash tasks/ &nbsp;→&nbsp; sequential AI task execution</div>
+          <pre><code>tasks/
+├── 01-research.md
+├── 02-implement.md
+├── 03-review.ash
+└── 04-deploy.md</code></pre>
         </div>
-        <div class="pain-card">
-          <h3>Guaranteed Sequencing</h3>
-          <p>"Research, then draft, then review, publish only if quality passes" — this is control flow, not
-            intelligence. The agent executes the step, not the sequence.</p>
+      </div>
+
+      <div class="code-compare" style="margin-top:16px">
+        <div class="code-compare-card">
+          <h3>Markdown task (01-research.md)</h3>
+          <pre><code>---
+agent: opencode
+model: sonnet
+---
+
+# Research the login system
+
+Trace all files in the login flow.
+Document responsibilities, inputs,
+and test coverage per file.</code></pre>
         </div>
-        <div class="pain-card">
-          <h3>Bounded Autonomy</h3>
-          <p>The agent decides <em>how</em> to do its step. The script decides <em>whether</em> the step happens, how
-            many times, and what comes next.</p>
+        <div class="code-compare-card">
+          <h3>Ash task (03-review.ash)</h3>
+          <pre><code>#!opencode:1.0
+
+RESULT = $(npm test 2>&1)
+if $? != 0 {
+  do "Tests failed. Fix errors
+and recompile.
+
+Test output:
+${RESULT}" with opencode
+}</code></pre>
         </div>
-        <div class="pain-card">
-          <h3>Execution Efficiency</h3>
-          <p>Every agent decision — even "what next?" — burns tokens and adds latency. Pre-determined control flow runs
-            at CPU speed. AI time is spent only where it adds value.</p>
+      </div>
+
+      <p class="section-desc" style="margin-top:24px">
+        Markdown and <code>.ash</code> files sort together by numeric prefix. Choose whichever fits each step.
+      </p>
+    </div>
+  </section>
+
+  <section class="syntax-ref">
+    <div class="container">
+      <h2 class="section-title">Progressive Complexity</h2>
+      <p class="section-desc">You never face more than you need. Start at level 1, add one concept at a time.</p>
+
+      <div style="overflow-x:auto;margin-top:24px">
+        <table style="width:100%;border-collapse:collapse;font-size:14px">
+          <thead>
+            <tr style="border-bottom:1px solid var(--border)">
+              <th style="text-align:left;padding:10px 12px;color:var(--text2);font-weight:600;white-space:nowrap">Level</th>
+              <th style="text-align:left;padding:10px 12px;color:var(--text2);font-weight:600">What you use</th>
+              <th style="text-align:left;padding:10px 12px;color:var(--text2);font-weight:600">What you get</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:10px 12px;color:var(--accent);font-weight:600;white-space:nowrap">1</td>
+              <td style="padding:10px 12px">Folder of <code>.md</code> files</td>
+              <td style="padding:10px 12px">Sequential AI task execution</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:10px 12px;color:var(--accent);font-weight:600;white-space:nowrap">2</td>
+              <td style="padding:10px 12px">YAML frontmatter</td>
+              <td style="padding:10px 12px">Per-task agent, model, on_fail</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:10px 12px;color:var(--accent);font-weight:600;white-space:nowrap">3</td>
+              <td style="padding:10px 12px"><code>.ash</code> files in the tree</td>
+              <td style="padding:10px 12px">Logic within a single step</td>
+            </tr>
+            <tr style="border-bottom:1px solid var(--border)">
+              <td style="padding:10px 12px;color:var(--accent);font-weight:600;white-space:nowrap">4</td>
+              <td style="padding:10px 12px"><code>${stdout}</code>, <code>$?</code></td>
+              <td style="padding:10px 12px">State passing between tasks</td>
+            </tr>
+            <tr>
+              <td style="padding:10px 12px;color:var(--accent);font-weight:600;white-space:nowrap">5</td>
+              <td style="padding:10px 12px">Standalone <code>.ash</code> scripts</td>
+              <td style="padding:10px 12px">Full orchestration: loops, retry, parallelism</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="syntax-ref">
+    <div class="container">
+      <h2 class="section-title">When You Need Full Orchestration</h2>
+      <p class="section-desc">When the workflow itself needs programming — iterate over files, retry on failure, branch on results — standalone <code>.ash</code> scripts give you the full pipeline.</p>
+      <div class="ref-grid">
+        <div class="ref-card">
+          <h3>Variables, Strings & Shell</h3>
+          <pre><code>MSG = "hello"
+ITEMS = ["a", "b", "c"]
+FIRST = ITEMS[0]
+print "count: ${len(ITEMS)}"
+working_dir = $(pwd)</code></pre>
         </div>
-        <div class="pain-card">
-          <h3>Repeatability</h3>
-          <p>A weekly report, a recurring audit, a batch processing job — these need to run the same way every time,
-            even if the content of each step varies.</p>
+        <div class="ref-card">
+          <h3>Agent Calls</h3>
+          <pre><code>do "Review this code" with opencode
+
+try {
+  do "Fix the bug" with fixer
+} fail {
+  do "Retry: ${stderr}"
+} upto 3</code></pre>
         </div>
-        <div class="pain-card">
-          <h3>Bidirectional Calling</h3>
-          <p>Scripts invoke agents. Agents invoke scripts. The boundary dissolves — deterministic and intelligent
-            execution woven into a single runtime, not stacked in layers.</p>
+        <div class="ref-card">
+          <h3>Control Flow</h3>
+          <pre><code>for FILE in FILES {
+  do "Review ${FILE}"
+  if $? != 0 { exit 1 }
+}
+
+exec npm test
+if $? == 0 {
+  print "all good"
+}</code></pre>
+        </div>
+        <div class="ref-card">
+          <h3>Functions & Composition</h3>
+          <pre><code>fn review(path) {
+  do "Review ${path}" with opencode
+}
+
+include "helpers.ash"
+review("src/main.rs")</code></pre>
         </div>
       </div>
     </div>
@@ -78,143 +183,45 @@
 
   <section class="compare">
     <div class="container">
-      <h2 class="section-title">Why not just use a shell script?</h2>
-      <p class="section-desc">Bash and Python have no concept of an "agent" — no built-in retry, no evaluation, no stdout/stderr per step. You end up hand-rolling infrastructure that has nothing to do with your workflow.
-      <br>Same task — loop over items, process each with an agent, retry on failure:</p>
-        <div class="code-compare">
-        <div class="code-compare-card">
-          <h3>Bash</h3>
-          <div class="cmp-badge">~35 lines · no agent abstraction, error handling repeated for every interaction</div>
-          <pre><code>#!/bin/bash
-# monitor support inbox — manual retry per ticket
-TICKETS=("password reset request" "refund inquiry" "account locked")
-for TICKET in "${TICKETS[@]}"; do
-  for TRY in 1 2; do
-    RESULT=$(opencode -p "Classify and reply to: $TICKET" 2>/dev/null)
-    if [ -n "$RESULT" ]; then
-      echo "handled: $TICKET"
-      break
-    fi
-    sleep 2
-  done
-done
-
-# check PRs — another nearly identical block
-for TRY in 1 2; do
-  opencode -p "Summarize open PRs" 2>/dev/null && break
-  sleep 2
-done
-
-# verify deployment — branching on result
-for TRY in 1 2; do
-  RESULT=$(opencode -p "Verify deployment health" 2>/dev/null)
-  if echo "$RESULT" | grep -qi "healthy"; then
-    echo "all good"
-  else
-    opencode -p "Investigate and alert" 2>/dev/null
-  fi
-  break
-done</code></pre>
+      <h2 class="section-title">Deterministic Control, AI Execution</h2>
+      <p class="section-desc">AI agents handle ambiguity — understanding intent, making judgments. They're bad at sequencing, branching, and retrying. Ash handles the structure. Agents handle the content.</p>
+      <div class="pain-grid" style="margin-top:32px">
+        <div class="pain-card">
+          <h3>Guaranteed Sequencing</h3>
+          <p>Tasks run in numbered order every time. No "what should I do next?" — the script decides. The agent executes.</p>
         </div>
-        <div class="code-compare-card highlight">
-          <h3>Ash</h3>
-          <div class="cmp-badge">~16 lines · agents as first-class citizens, built-in retry, focus on the workflow</div>
-          <pre><code class="example-code">#!opencode:0.1.0
-
-# monitor support inbox — each ticket processed with a prompt file
-TICKETS = ["password reset request", "refund inquiry", "account locked"]
-for TICKET in TICKETS {
-  do @classify-and-reply.md
-  print "handled: ${TICKET}"
-}
-
-# one-shot review using a spec file
-do @review-prs.md
-
-# verify deployment — branch on result
-do @verify-deploy.md
-if $? != 0 {
-  do @investigate-and-alert.md
-}</code></pre>
+        <div class="pain-card">
+          <h3>Bounded Autonomy</h3>
+          <p>The agent decides <em>how</em> to do its step. Ash decides <em>whether</em> the step happens, how many times, and what comes next.</p>
         </div>
-      </div>
-      <p style="font-size:13px;color:var(--text2);margin-top:16px;text-align:center">
-        Bash makes you build agent infrastructure. Ash gives you agents as a first-class language feature —
-        so you write the <em>workflow</em>, not the plumbing.
-        <br>Plain enough that non-technical team members can read (and write) their daily routines.
-      </p>
-    </div>
-  </section>
-
-  <section class="syntax-ref">
-    <div class="container">
-      <h2 class="section-title">Language at a Glance</h2>
-      <div class="ref-grid">
-        <div class="ref-card">
-          <h3>Variables &amp; Strings</h3>
-          <pre><code class="example-code">MSG = "hello"
-COUNT = 3
-ITEMS = ["a", "b", "c"]
-FIRST = ITEMS[0]
-print "count: ${len(ITEMS)}"
-exec RUSTFLAGS="-D warnings" cargo build 2>&1
-working_dir = $(pwd)
-</code></pre>
+        <div class="pain-card">
+          <h3>Repeatability</h3>
+          <p>A weekly report, a recurring audit, a batch job — same process every time, even when the content of each step varies.</p>
         </div>
-        <div class="ref-card">
-          <h3>Control Flow</h3>
-          <pre><code class="example-code">for ITEM in ITEMS {
-  do "Process ${ITEM}" with js-echo
-  if $? != 0 {
-    print "failed on ${ITEM}"
-    exit 1
-  } else if len(stdout) < 5 {
-    print "too short, retrying"
-    continue
-  }
-  print "${ITEM} done"
-}</code></pre>
+        <div class="pain-card">
+          <h3>Execution Efficiency</h3>
+          <p>Pre-determined control flow runs at CPU speed. AI time is spent only where it adds value — on the content of each step.</p>
         </div>
-        <div class="ref-card">
-          <h3>Agent Calls</h3>
-          <pre><code class="example-code">within "/project" {
-  try {
-    do @refactor_auth.md with subagent fixer
-  } evaluate with {
-    exec python complexity_analysis.py
-  } accept {
-    print "approved"
-  } partial {
-    do "Revise: ${report}"
-  } fail {
-     print "rejected" 
-  } upto 3
-}</code></pre>
+        <div class="pain-card">
+          <h3>Workflows as Code</h3>
+          <p>Review content, audit compliance, publish updates — all live in files you commit, version, share, and re-run. Not buried in chat threads.</p>
         </div>
-        <div class="ref-card">
-          <h3>Retry</h3>
-          <pre><code class="example-code">try {
-  do "Refactor" with subagent refactor
-  exec RUSTFLAGS="-D warnings" cargo build 2>&1
-} fail {
-  print "attempt failed: ${stderr}"
-  do "Retry with context: ${stderr}"
-} upto 3
-
-</code></pre>
+        <div class="pain-card">
+          <h3>Agent-Agnostic</h3>
+          <p>OpenCode, Claude Code, Aider, or a custom tool. Define in a config file. Swap providers without touching your workflows.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <section id="playground">
+  <section id="playground" style="padding:48px 0 64px">
     <div class="container">
       <h2 class="section-title">Playground</h2>
-      <p class="section-desc">Write and run Ash scripts in your browser. The built-in <code>js-echo</code> agent echoes your prompt back — useful for testing control flow and syntax. Use real agent engines with the Ash CLI locally.</p>
+      <p class="section-desc">Try Ash scripts in your browser. The built-in <code>js-echo</code> agent echoes your prompt — useful for testing syntax and control flow.</p>
       <div class="playground-layout">
         <div class="panel">
           <div class="panel-header">
-            <span>Script.ash</span>
+            <span>Script</span>
             <span style="display:flex;gap:8px">
               <button class="btn" onclick="loadExample()" style="padding:4px 10px;font-size:11px">Load Example</button>
               <button class="btn" onclick="clearEditor()" style="padding:4px 10px;font-size:11px">Clear</button>
@@ -224,24 +231,16 @@ working_dir = $(pwd)
             <div id="editor-highlight" class="editor-highlight" aria-hidden="true"></div>
             <textarea id="editor" spellcheck="false">#!js-echo:0.1.0
 
-# Ash language demo — variables, loops, conditionals, agent calls
 print "=== Ash Playground ==="
-print ""
 
-TASKS = ["Check the login page", "Test the search feature", "Review the footer links"]
-print "Running ${len(TASKS)} automated checks..."
-print ""
-
+TASKS = ["Check login", "Test search", "Review footer"]
 for TASK in TASKS {
-	do "Navigate to the site and ${TASK}"
+	do "Navigate and ${TASK}"
 	print "Task: ${TASK}"
 	print "Result: ${stdout}"
-	print ""
 }
 
-print "--- Summary ---"
-print "Completed ${len(TASKS)} checks"
-print "All done"
+print "Completed ${len(TASKS)} tasks"
           </textarea>
           </div>
         </div>
@@ -264,8 +263,7 @@ print "All done"
         <button class="btn" onclick="clearOutput()">Clear Output</button>
         <span style="flex:1"></span>
         <span style="font-size:12px;color:var(--text2)">
-          Powered by <strong style="color:var(--text)">ash.wasm</strong>
-          <span id="wasm-status" style="margin-left:8px;color:var(--accent3)">loading WASM...</span>
+          <span id="wasm-status" style="color:var(--accent3)">loading WASM...</span>
         </span>
       </div>
     </div>
@@ -273,7 +271,7 @@ print "All done"
 
   <footer style="padding:24px 0;border-top:1px solid var(--border);text-align:center;color:var(--text2);font-size:13px">
     <div class="container">
-      Ash Language — Agent Shell Language Specification v0.1.0
+      Ash — Open Source Task Runner for AI Agents &middot; <a href="https://github.com/kenny1125nz/ash-lang">GitHub</a>
     </div>
   </footer>
 

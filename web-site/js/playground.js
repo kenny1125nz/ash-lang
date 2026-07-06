@@ -171,7 +171,7 @@ function setupWorkerHandlers() {
 
 async function initWasm() {
   try {
-    evalWorker = new Worker('../wasm/eval-worker.js', { type: 'module' });
+    evalWorker = new Worker('./eval-worker.js', { type: 'module' });
     setupWorkerHandlers();
     wasmStatusEl.textContent = 'loading WASM...';
     wasmStatusEl.style.color = 'var(--accent3)';

@@ -104,3 +104,27 @@ jobs:
           npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  deploy-website:
+    name: Deploy Website
+    if: github.ref_type == 'branch' && github.ref_name == 'master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      - name: Build WASM
+        run: |
+          cd ash-wasm
+          wasm-pack build --target web --release
+          cp pkg/ash_wasm.js ../web-site/wasm/ash.js
+          cp pkg/ash_wasm_bg.wasm ../web-site/wasm/ash_bg.wasm
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy web-site --project-name=ash-lang
