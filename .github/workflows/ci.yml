@@ -107,7 +107,8 @@ jobs:
 
   deploy-website:
     name: Deploy Website
-    if: github.ref_type == 'branch' && github.ref_name == 'master'
+    if: github.ref_type == 'tag'
+    needs: github-release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -129,4 +130,4 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           npm install -g wrangler
-          wrangler pages deploy web-site --project-name=ash-lang
+          wrangler pages deploy web-site --project-name=green-band-4185
