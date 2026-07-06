@@ -120,6 +120,7 @@ jobs:
         run: |
           cd ash-wasm
           wasm-pack build --target web --release
+          mkdir -p ../web-site/wasm
           cp pkg/ash_wasm.js ../web-site/wasm/ash.js
           cp pkg/ash_wasm_bg.wasm ../web-site/wasm/ash_bg.wasm
       - name: Deploy to Cloudflare Pages
