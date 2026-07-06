@@ -5,7 +5,7 @@
 
 Ash is a scripting language for composing AI coding agents (Copilot, OpenCode, Claude Code, etc.) into automated code modification workflows.
 
-Ash also supports a **directory-based orchestration mode** — a simpler way to organize agent tasks using folders and markdown files instead of writing `.ash` scripts. See [Directory-Based Orchestration](#directory-based-orchestration).
+Ash also supports a **directory-based orchestration mode** — a simpler way to organize agent tasks using folders and markdown or ash files. See [Directory-Based Orchestration](#directory-based-orchestration).
 
 ---
 
@@ -38,18 +38,18 @@ Execution order: `01-intro.md` → `02-types/01-token.md` → `02-types/02-value
 
 ### Task file eligibility
 
-Only `.md` files with a **numeric prefix** (`01-`, `02-`, etc.) are executed. Files that don't qualify are skipped with a `[skip]` message:
+Only `.md` and `.ash` files with a **numeric prefix** (`01-`, `02-`, etc.) are executed. Files that don't qualify are skipped with a `[skip]` message:
 
-- `[skip] non-md: <path>` — not a `.md` file
-- `[skip] no-prefix: <path>` — `.md` file without a numeric prefix (e.g. `readme.md`)
+- `[skip] non-task: <path>` — not a `.md` or `.ash` file
+- `[skip] no-prefix: <path>` — `.md` or `.ash` file without a numeric prefix (e.g. `readme.md`)
 - `[skip] empty: <path>` — file with only whitespace/frontmatter, no prompt content
 - Hidden files and directories (starting with `.`) are skipped silently
 
 Duplicate numeric prefixes at the same level are an error — ash reports the conflict and exits.
 
-### Per-task configuration via frontmatter
+### Per-task configuration
 
-Each `.md` file can include YAML frontmatter to override settings:
+**Markdown files (`.md`):** Each `.md` file can include YAML frontmatter to override settings:
 
 ```markdown
 ---
@@ -71,19 +71,43 @@ The content of the task prompt goes here...
 | `compact` | `on`, `off`, `auto`       | Compacting behavior for this task              |
 | `on_fail` | `stop` (default), `continue` | Whether to halt or continue after failure |
 
+**Ash script files (`.ash`):** Agent and model are set via the shebang line (`#!<engine>:<version>[:<model>]`). The script body is evaluated as a standard ash program. Empty ash files are skipped.
+
 ### CLI flags
 
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--dry-run` | | Print tasks without executing |
 | `--continue-on-error` | `-k` | Keep running after failures (overrides per-task `stop`) |
-| `--agent <spec>` | | Default agent and model in shebang format: `agent[:version[:model]]` |
+| `--agent <spec>` | | Default agent and model: `agent[:model]` |
+| `--check` | `-c` | Parse and validate the script without executing (prints `OK` and exits) |
+
+The `discover` subcommand scans for available agents and can generate a config file:
+
+```bash
+ash discover            # print available agents
+ash discover --write    # generate ash-project.yaml
+ash discover --force    # overwrite existing ash-project.yaml
+```
 
 ### Agent fallback priority
 
-1. Task frontmatter (`agent:` key)
+1. Task frontmatter / shebang line
 2. CLI `--agent` flag
 3. Built-in default (`echo`)
+
+### Built-in agents
+
+These agents are recognized without an `ash-project.yaml` configuration file:
+
+| Agent          | Description                                      |
+|----------------|--------------------------------------------------|
+| `echo`         | Echoes the prompt back (default, useful for testing) |
+| `opencode`     | OpenCode CLI (`opencode run`)                    |
+| `claude-code`  | Claude Code CLI (`claude`)                       |
+| `aider`        | Aider CLI (`aider`)                              |
+
+Any other agent name requires an `ash-project.yaml` entry or produces a warning if no config file is found.
 
 ---
 
@@ -134,10 +158,10 @@ The `$` prefix is also accepted for backward compatibility (e.g. `$FILES`, `$DIF
 
 | Variable    | Set by                              | Description                                 |
 | ----------- | ----------------------------------- | ------------------------------------------- |
-| `$?`        | any statement                       | Exit code of the last command or agent call |
-| `${stderr}` | `try { } fail { }`                  | Stderr output from the failed attempt       |
-| `${stdout}` | `try { } fail { }`                  | Stdout output from the failed attempt       |
-| `${report}` | `try { } evaluate with { }`         | Stdout from the evaluator block             |
+| `$?`        | any agent call or exec | Exit code of the last agent call or command |
+| `${stdout}` | any agent call or exec | Stdout output from the last agent call or command |
+| `${stderr}` | any agent call or exec | Stderr output from the last agent call or command |
+| `${report}` | `try { } evaluate with { }`  | Stdout from the evaluator block            |
 
 ### Array variables
 

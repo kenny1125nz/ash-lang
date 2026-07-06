@@ -438,3 +438,25 @@ try {
 } fail {
   print "  correctly rejected: within end without begin"
 } upto 1
+
+# Within begin with non-existent path — error
+print "within begin with bad path (error expected):"
+try {
+  within begin "/nonexistent/path/xyz"
+  print "  FAIL: should have errored"
+} fail {
+  print "  correctly rejected: invalid path"
+} upto 1
+
+# Nested within toggles (stack-based, should work)
+print "nested within toggles:"
+CWD_ROOT = $(pwd)
+within begin "/tmp"
+CWD_INNER = $(pwd)
+within begin "/var"
+CWD_INNER2 = $(pwd)
+within end
+CWD_RESTORED = $(pwd)
+within end
+CWD_FINAL = $(pwd)
+print "  nested within: ${CWD_INNER} → ${CWD_INNER2} → ${CWD_RESTORED} → ${CWD_FINAL}"

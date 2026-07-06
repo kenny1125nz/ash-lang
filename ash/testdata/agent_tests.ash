@@ -496,3 +496,50 @@ print "  combined: ${stdout}"
 within end
 session end
 print "  session + within toggle works"
+
+print "=== 52. Within toggle — begin with non-existent path ==="
+try {
+  within begin "/nonexistent/path/xyz"
+  print "  FAIL: should have errored"
+} fail {
+  print "  within begin with bad path correctly rejected"
+} upto 1
+
+print "=== 53. Within toggle — nested (stack-based, should work) ==="
+CWD_ROOT = $(pwd)
+within begin "/tmp"
+CWD_L1 = $(pwd)
+within begin "/var"
+CWD_L2 = $(pwd)
+within end
+CWD_L1_RESTORED = $(pwd)
+within end
+CWD_ROOT_RESTORED = $(pwd)
+print "  root: ${CWD_ROOT}"
+print "  level1: ${CWD_L1}"
+print "  level2: ${CWD_L2}"
+print "  after pop1 (should be L1): ${CWD_L1_RESTORED}"
+print "  after pop2 (should be root): ${CWD_ROOT_RESTORED}"
+print "  nested within toggle works"
+
+print "=== 54. Session toggle — begin inside session block is error ==="
+try {
+  session {
+    session begin
+    print "  FAIL: should have errored"
+  }
+} fail {
+  print "  session begin inside session block correctly rejected"
+} upto 1
+
+print "=== 55. Session toggle — block inside begin is error ==="
+try {
+  session begin
+  session {
+    do "should not run"
+  }
+  print "  FAIL: nested session should have errored"
+} fail {
+  print "  block inside toggle correctly rejected"
+  session end
+} upto 1
