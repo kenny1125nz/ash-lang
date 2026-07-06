@@ -1,5 +1,8 @@
 use std::io::{self, BufRead, IsTerminal, Write};
 
+use rustyline::error::ReadlineError;
+use rustyline::DefaultEditor;
+
 use crate::ast::Node;
 use crate::eval::{EvalError, Evaluator};
 use crate::lexer;
@@ -16,10 +19,18 @@ pub fn run_repl(eval: &mut Evaluator) -> i32 {
     println!("ash REPL. Type .help for commands, Ctrl-D to exit.");
     println!();
 
+    if is_tty() {
+        run_repl_tty(eval)
+    } else {
+        run_repl_piped(eval)
+    }
+}
+
+fn run_repl_piped(eval: &mut Evaluator) -> i32 {
     let mut stdin = io::stdin().lock();
 
     loop {
-        let accumulated = match read_input(&mut stdin, "ash> ") {
+        let accumulated = match read_input(&mut |p| read_line(&mut stdin, p), "ash> ") {
             Some(input) => input,
             None => {
                 println!();
@@ -35,6 +46,42 @@ pub fn run_repl(eval: &mut Evaluator) -> i32 {
         if trimmed.is_empty() {
             continue;
         }
+
+        if trimmed.starts_with('.') {
+            if let Some(exit_code) = handle_dot_command(trimmed, eval) {
+                return exit_code;
+            }
+            continue;
+        }
+
+        if eval_input(accumulated, eval) {
+            return 0;
+        }
+    }
+}
+
+fn run_repl_tty(eval: &mut Evaluator) -> i32 {
+    let mut rl = DefaultEditor::new().expect("failed to create line editor");
+
+    loop {
+        let accumulated = match read_input(&mut |p| read_line_tty(&mut rl, p), "ash> ") {
+            Some(input) => input,
+            None => {
+                println!();
+                return 0;
+            }
+        };
+
+        if accumulated.is_empty() {
+            continue;
+        }
+
+        let trimmed = accumulated.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        rl.add_history_entry(&accumulated).ok();
 
         if trimmed.starts_with('.') {
             if let Some(exit_code) = handle_dot_command(trimmed, eval) {
@@ -98,10 +145,10 @@ fn is_expression_node(node: &Node) -> bool {
     )
 }
 
-fn read_input(stdin: &mut io::StdinLock, prompt: &str) -> Option<String> {
+fn read_input(read_line: &mut dyn FnMut(&str) -> Option<String>, prompt: &str) -> Option<String> {
     let mut accumulated: Vec<String> = Vec::new();
 
-    let first_line = match read_line(stdin, prompt) {
+    let first_line = match read_line(prompt) {
         Some(l) if l.is_empty() => return Some(String::new()),
         Some(l) => l,
         None => return None,
@@ -120,7 +167,7 @@ fn read_input(stdin: &mut io::StdinLock, prompt: &str) -> Option<String> {
                 let stripped = combined.trim_end_matches('\\');
                 accumulated.push(stripped.trim_end().to_string());
 
-                let next = match read_line(stdin, "... ") {
+                let next = match read_line("... ") {
                     Some(l) if l.is_empty() => "".to_string(),
                     Some(l) => l,
                     None => return None,
@@ -130,7 +177,7 @@ fn read_input(stdin: &mut io::StdinLock, prompt: &str) -> Option<String> {
                 last.push_str(&next);
             }
             Continuation::Brace => {
-                let next = match read_line(stdin, "... ") {
+                let next = match read_line("... ") {
                     Some(l) if l.is_empty() => "".to_string(),
                     Some(l) => l,
                     None => return None,
@@ -189,6 +236,18 @@ fn read_line(stdin: &mut io::StdinLock, prompt: &str) -> Option<String> {
         Ok(0) => None,
         Ok(_) => Some(line.trim_end_matches('\n').trim_end_matches('\r').to_string()),
         Err(e) if e.kind() == io::ErrorKind::Interrupted => {
+            println!();
+            Some(String::new())
+        }
+        Err(_) => None,
+    }
+}
+
+fn read_line_tty(rl: &mut DefaultEditor, prompt: &str) -> Option<String> {
+    match rl.readline(prompt) {
+        Ok(line) => Some(line),
+        Err(ReadlineError::Eof) => None,
+        Err(ReadlineError::Interrupted) => {
             println!();
             Some(String::new())
         }

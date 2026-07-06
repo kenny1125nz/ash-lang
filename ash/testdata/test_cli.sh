@@ -69,6 +69,7 @@ rm -rf "$TMPDIR"
 echo "=== logging: ASH_LOG_FILE uses custom path ==="
 TMPDIR=$(mktemp -d)
 pushd "$TMPDIR" > /dev/null
+mkdir -p custom/path
 ASH_LOG=debug ASH_LOG_FILE=custom/path/ash.log $ASH_BIN discover 2>&1 > /dev/null
 [ -f custom/path/ash.log ] && pass "ASH_LOG_FILE custom path works" || fail "ASH_LOG_FILE custom path not found"
 popd > /dev/null
@@ -79,6 +80,33 @@ rm -rf "$TMPDIR"
 echo "=== --check: validates valid script ==="
 OUT=$($ASH_BIN --check "$(dirname "$0")/lang_tests.ash" 2>&1) && pass "--check exited 0" || fail "--check exited $?"
 echo "$OUT" | grep -qi "ok" && pass "--check printed OK" || true
+
+# ----- piped batch input (non-TTY) -----
+
+echo "=== batch: single print statement ==="
+OUT=$(echo 'print "hello"' | $ASH_BIN 2>/dev/null)
+echo "$OUT" | grep -q "hello" && pass "batch printed output" || fail "batch missing output"
+
+echo "=== batch: variable + print ==="
+OUT=$(echo 'X = 42
+print X' | $ASH_BIN 2>/dev/null)
+echo "$OUT" | grep -q "42" && pass "batch handles vars" || fail "batch missing var value"
+
+echo "=== batch: multi-line block ==="
+OUT=$(printf 'if true {\n  print "block"\n}' | $ASH_BIN 2>/dev/null)
+echo "$OUT" | grep -q "block" && pass "batch handles blocks" || fail "batch missing block output"
+
+echo "=== batch: expr evaluation (print form) ==="
+OUT=$(echo 'print "result: " + (2 + 2)' | $ASH_BIN 2>/dev/null)
+echo "$OUT" | grep -q "result: 4" && pass "batch evaluates expression" || fail "batch missing expression result"
+
+echo "=== batch: exit code propagates ==="
+# Disable set -e for this test since we expect non-zero exit
+set +e
+echo 'exit 42' | $ASH_BIN 2>/dev/null
+rc=$?
+set -e
+[ "$rc" -eq 42 ] && pass "batch exit code propagates" || fail "batch exit code was $rc"
 
 # ----- cleanup -----
 

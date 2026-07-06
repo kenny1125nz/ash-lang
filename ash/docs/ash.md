@@ -828,7 +828,11 @@ do "Deploy to staging" with subagent deployer
 
 ## Interactive Mode (REPL)
 
-When `ash` is invoked with no arguments and stdin is a terminal (TTY), it enters an interactive REPL:
+When `ash` is invoked with no arguments and stdin is a terminal (TTY), it enters an interactive REPL. The REPL has two modes depending on how stdin is connected:
+
+### TTY mode (line editing with history)
+
+When running in a terminal, the REPL uses the **rustyline** library to provide full line editing with arrow key navigation, command history, and prompt support:
 
 ```bash
 $ ash
@@ -839,8 +843,15 @@ ash> print "hello ${NAME}"
 hello world
 ash> 2 + 2
 4
-ash> exit
+ash> <Up>                   # recalls previous line
+ash> <Left>/<Right>        # cursor navigation within line
 ```
+
+**Features:**
+- **Arrow keys**: Up/Down cycle through command history; Left/Right move the cursor within the current line
+- **In-memory history**: All entered commands are stored for the duration of the session
+- **Ctrl-C**: Cancels the current multi-line input and returns to the `ash> ` prompt
+- **Ctrl-D**: Exits the REPL (EOF)
 
 ### Line accumulation
 
@@ -877,9 +888,18 @@ Expressions are evaluated immediately and their results are printed. Statement f
 | `.vars` | List all variables and their current values |
 | `.exit` | Exit the REPL |
 
-### Piped input
+### Piped input (non-TTY mode)
 
-When stdin is not a terminal (e.g., `echo "print 42" | ash`), ash executes the input as a batch script with no prompt — the same behavior as before.
+When stdin is not a terminal (e.g., `echo "print 42" | ash`), ash reads input line-by-line with no prompt, no line editing, and no history — suitable for scripting and one-shot evaluation:
+
+```bash
+$ echo 'print "hello"' | ash
+hello
+$ echo 'if true { print "yes" }' | ash
+yes
+```
+
+This mode uses plain `stdin.read_line()` and behaves identically to the original REPL before line editing was added. Block constructs and line continuation work the same way as in TTY mode.
 
 ---
 
