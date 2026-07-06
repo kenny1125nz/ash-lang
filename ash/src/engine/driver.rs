@@ -1,3 +1,4 @@
+use super::config::AgentConfig;
 use super::types::ExecuteRequest;
 
 #[derive(Debug, Clone)]
@@ -101,6 +102,52 @@ impl LocalCliDriver for EchoDriver {
             cmd: "echo".into(),
             args: vec![req.prompt.clone()],
             stdin_prompt: false,
+        }
+    }
+}
+
+/// A driver that reads all command construction from an `AgentConfig`.
+///
+/// Supports `model_flag`, `session_flag`, `message_flag`, and `stdin_prompt`
+/// fields so that any CLI agent can be registered without writing new Rust code.
+pub struct GenericDriver {
+    pub config: AgentConfig,
+}
+
+impl GenericDriver {
+    pub fn new(config: AgentConfig) -> Self {
+        GenericDriver { config }
+    }
+}
+
+impl LocalCliDriver for GenericDriver {
+    fn name(&self) -> &str {
+        &self.config.name
+    }
+
+    fn build_command(&self, req: &ExecuteRequest) -> CommandSpec {
+        let mut args = self.config.args.clone();
+        if !req.model.is_empty() {
+            if let Some(ref flag) = self.config.model_flag {
+                args.push(flag.clone());
+                args.push(req.model.clone());
+            }
+        }
+        if req.session {
+            if let Some(ref flag) = self.config.session_flag {
+                args.push(flag.clone());
+            }
+        }
+        if let Some(ref flag) = self.config.message_flag {
+            args.push(flag.clone());
+            args.push(req.prompt.clone());
+        } else if !self.config.stdin_prompt {
+            args.push(req.prompt.clone());
+        }
+        CommandSpec {
+            cmd: self.config.cmd.clone(),
+            args,
+            stdin_prompt: self.config.stdin_prompt,
         }
     }
 }

@@ -12,8 +12,8 @@ pub use api::ApiAdapter;
 pub use browser::{BrowserAdapter, BrowserFallback};
 pub use config::{AgentConfig, ApiEndpoint, AuthConfig, ContainerConfig};
 pub use container::ContainerAdapter;
-pub use discovery::{discover, discover_and_register, discovery_summary, generate_yaml, print_discovery, write_config, DiscoveryResult};
-pub use driver::{AiderDriver, ClaudeDriver, CommandSpec, EchoDriver, LocalCliDriver, OpenCodeDriver};
+pub use discovery::{discover, discover_and_register, discovery_summary, generate_yaml, print_discovery, read_config, write_config, DiscoveryResult};
+pub use driver::{AiderDriver, ClaudeDriver, CommandSpec, EchoDriver, GenericDriver, LocalCliDriver, OpenCodeDriver};
 pub use types::{AgentType, ExecuteRequest, ExecuteResponse};
 
 use std::collections::HashMap;
@@ -41,7 +41,8 @@ pub fn from_config(cfg: &AgentConfig) -> Arc<dyn Adapter> {
                 Some("opencode") => Arc::new(OpenCodeDriver),
                 Some("claude-code") | Some("claude") => Arc::new(ClaudeDriver),
                 Some("aider") => Arc::new(AiderDriver),
-                _ => Arc::new(EchoDriver),
+                // Named but unknown driver, or no driver field — use the generic path
+                _ => Arc::new(GenericDriver::new(cfg.clone())),
             };
             Arc::new(LocalCliAdapter::new(&cfg.name, driver))
         }

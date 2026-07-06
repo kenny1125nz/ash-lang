@@ -128,40 +128,11 @@ fn validate_agents(script: &Script) -> Result<(), String> {
         return Ok(());
     }
 
-    let config_src = match std::fs::read_to_string(config_path) {
-        Ok(s) => s,
+    let configured = match engine::read_config("ash-project.yaml") {
+        Ok(agents) => agents.into_iter().map(|a| a.name).collect::<HashSet<_>>(),
         Err(e) => {
             return Err(format!("failed to read ash-project.yaml: {}", e));
         }
-    };
-
-    let configured = match config_src.lines().find(|l| l.trim() == "agents:") {
-        Some(_) => {
-            let mut names = HashSet::new();
-            let mut in_agents = false;
-            for line in config_src.lines() {
-                let trimmed = line.trim();
-                if trimmed == "agents:" {
-                    in_agents = true;
-                    continue;
-                }
-                if in_agents {
-                    if trimmed.starts_with('-') {
-                        continue;
-                    }
-                    if !trimmed.starts_with('#') && trimmed.contains(':') {
-                        if let Some(name) = trimmed.split(':').next() {
-                            names.insert(name.trim().to_string());
-                        }
-                    }
-                    if !trimmed.starts_with(' ') && !trimmed.starts_with('\t') && trimmed != "" && !trimmed.starts_with('#') {
-                        break;
-                    }
-                }
-            }
-            names
-        }
-        None => HashSet::new(),
     };
 
     let mut unknown: Vec<&str> = Vec::new();
@@ -178,7 +149,7 @@ fn validate_agents(script: &Script) -> Result<(), String> {
              agents:\n\
              {}",
             unknown.iter().map(|s| format!("'{}'", s)).collect::<Vec<_>>().join(", "),
-            unknown.iter().map(|s| format!("  {}:\n    type: local-cli\n    driver: opencode\n", s)).collect::<Vec<_>>().join("")
+            unknown.iter().map(|s| format!("  {}:\n    type: local-cli\n    cmd: <binary>\n", s)).collect::<Vec<_>>().join("")
         ));
     }
 
@@ -229,7 +200,15 @@ fn cmd_discover(args: &[String]) -> i32 {
 
 fn ensure_agents_registered() {
     if std::path::Path::new("ash-project.yaml").exists() {
-        engine::register_defaults();
+        match engine::read_config("ash-project.yaml") {
+            Ok(agents) => {
+                for config in agents {
+                    let adapter = engine::from_config(&config);
+                    engine::register(&config.name, adapter);
+                }
+            }
+            Err(e) => eprintln!("warning: failed to read ash-project.yaml: {}", e),
+        }
     } else {
         let result = engine::discover_and_register();
         let summary = engine::discovery_summary(&result);
