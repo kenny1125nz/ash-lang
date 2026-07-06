@@ -9,7 +9,7 @@ let runningProcess: child_process.ChildProcess | null = null;
 let binaryPath: string | null = null;
 
 const INSTALL_INSTRUCTIONS =
-  "Install via npm: npm i -g @ash-lang/cli  |  GitHub Releases: https://github.com/ash-lang/ash/releases";
+  "Install via npm: npm i -g @ash-lang/cli  |  GitHub Releases: https://github.com/kenny1125nz/ash-lang/releases";
 
 function resolveBinaryPath(extensionPath: string): string | null {
   const whichCmd = os.platform() === "win32" ? "where" : "which";

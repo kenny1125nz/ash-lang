@@ -604,4 +604,40 @@ agents:
         assert_eq!(parse_yaml_array(r#"[]"#), Vec::<String>::new());
         assert_eq!(parse_yaml_array(""), Vec::<String>::new());
     }
+
+    #[test]
+    fn test_read_config_empty_file() {
+        let path = write_tmp_yaml("");
+        let agents = read_config(path.to_str().unwrap()).unwrap();
+        std::fs::remove_file(&path).ok();
+        assert!(agents.is_empty());
+    }
+
+    #[test]
+    fn test_read_config_no_agents_key() {
+        let yaml = "# just a comment\nsome_other_key: value\n";
+        let path = write_tmp_yaml(yaml);
+        let agents = read_config(path.to_str().unwrap()).unwrap();
+        std::fs::remove_file(&path).ok();
+        assert!(agents.is_empty());
+    }
+
+    #[test]
+    fn test_read_config_mixed_old_and_new() {
+        let yaml = r#"agents:
+  test-agent:
+    type: local-cli
+    driver: opencode
+    cmd: custom-bin
+    model_flag: --model
+"#;
+        let path = write_tmp_yaml(yaml);
+        let agents = read_config(path.to_str().unwrap()).unwrap();
+        std::fs::remove_file(&path).ok();
+        assert_eq!(agents.len(), 1);
+        // When both driver and cmd are present, driver takes precedence through from_config()
+        assert_eq!(agents[0].driver.as_deref(), Some("opencode"));
+        assert_eq!(agents[0].cmd, "custom-bin");
+        assert_eq!(agents[0].model_flag.as_deref(), Some("--model"));
+    }
 }

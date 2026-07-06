@@ -1406,4 +1406,78 @@ mod tests {
             other => panic!("expected BinaryExpr, got {:?}", other),
         }
     }
+
+    #[test]
+    fn test_parse_binary_try() {
+        let src = "try { print 1 } fail { print 2 } upto 3";
+        let script = parse_str(src);
+        match &script.body[0] {
+            Node::BinaryTry(_) => {}
+            other => panic!("expected BinaryTry, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_eval_try() {
+        let src = "try { print 1 } evaluate with { print 2 } accept { print 3 } partial { print 4 } fail { print 5 } upto 3";
+        let script = parse_str(src);
+        match &script.body[0] {
+            Node::EvalTry(_) => {}
+            other => panic!("expected EvalTry, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_session_block() {
+        let script = parse_str("session { print 1 }");
+        match &script.body[0] {
+            Node::SessionBlock(_) => {}
+            other => panic!("expected SessionBlock, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_session_toggle() {
+        let script = parse_str("session begin");
+        match &script.body[0] {
+            Node::SessionToggle(t) => assert!(t.active),
+            other => panic!("expected SessionToggle, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_within_toggle() {
+        let script = parse_str("within begin \"/tmp\"");
+        match &script.body[0] {
+            Node::WithinToggle(t) => assert!(t.active),
+            other => panic!("expected WithinToggle, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_background() {
+        let script = parse_str("print 1 &");
+        match &script.body[0] {
+            Node::Background(_) => {}
+            other => panic!("expected Background, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_compact_stmt() {
+        let script = parse_str("compact \"truncate 32000\"");
+        match &script.body[0] {
+            Node::CompactStmt(_) => {}
+            other => panic!("expected CompactStmt, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_dir_block() {
+        let script = parse_str("within \"/tmp\" { print 1 }");
+        match &script.body[0] {
+            Node::DirBlock(_) => {}
+            other => panic!("expected DirBlock, got {:?}", other),
+        }
+    }
 }

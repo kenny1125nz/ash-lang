@@ -509,8 +509,11 @@ mod tests {
         ArrayLiteral, Background, BinaryExpr, BinaryTry, BoolLiteral, Break, CompactStmt, Continue,
         DirBlock, ElseIf, Env, EvalTry, Exit, FnCall, FnDecl, ForStmt, IfStmt, Include,
         IntLiteral, Pos, Print, Return, StringLiteral, UnaryExpr, VarAssign, VarRef, WaitBlock,
-        WhileStmt,
+        WhileStmt, AgentCall,
     };
+
+    use crate::engine::{self, EchoDriver, LocalCliAdapter};
+    use std::sync::Arc;
 
     fn make_evaluator() -> Evaluator {
         Evaluator::new()
@@ -1507,5 +1510,105 @@ mod tests {
         );
         ev.eval_statement(&stmt).unwrap();
         assert_eq!(ev.get_var("CWD").unwrap(), Value::String("changed".to_string()));
+    }
+
+    fn agent_call_node(prompt: Node) -> Node {
+        Node::AgentCall(AgentCall {
+            pos: Pos { line: 1, col: 1 },
+            prompt: Box::new(prompt),
+            agent: None,
+            subagent: String::new(),
+            model: None,
+            dir: None,
+            compact: None,
+        })
+    }
+
+    fn register_echo() {
+        engine::register(
+            "echo",
+            Arc::new(LocalCliAdapter::new("echo", Arc::new(EchoDriver))),
+        );
+    }
+
+    #[test]
+    fn test_agent_call_echo() {
+        register_echo();
+        let mut ev = make_evaluator();
+        ev.stdout = Arc::new(Mutex::new(Box::new(std::io::sink())));
+
+        let result = ev.eval_statement(&agent_call_node(string_lit("hello"))).unwrap();
+        assert_eq!(result, Value::String("hello\n".to_string()));
+        assert_eq!(ev.get_var("?").unwrap(), Value::Int(0));
+        assert_eq!(
+            ev.get_var("stdout").unwrap(),
+            Value::String("hello\n".to_string())
+        );
+    }
+
+    #[test]
+    fn test_agent_call_with_clause_overrides_default() {
+        register_echo();
+        let mut ev = make_evaluator();
+        ev.stdout = Arc::new(Mutex::new(Box::new(std::io::sink())));
+        ev.default_agent = "nonexistent".to_string();
+
+        let mut node = agent_call_node(string_lit("world"));
+        if let Node::AgentCall(ref mut ac) = node {
+            ac.agent = Some("echo".to_string());
+        }
+
+        let result = ev.eval_statement(&node).unwrap();
+        assert_eq!(result, Value::String("world\n".to_string()));
+    }
+
+    #[test]
+    fn test_agent_call_using_model() {
+        register_echo();
+        let mut ev = make_evaluator();
+        ev.stdout = Arc::new(Mutex::new(Box::new(std::io::sink())));
+
+        let model_node = string_lit("sonnet");
+        let mut node = agent_call_node(string_lit("test"));
+        if let Node::AgentCall(ref mut ac) = node {
+            ac.model = Some(Box::new(model_node));
+        }
+
+        let _ = ev.eval_statement(&node).unwrap();
+        // model is passed to the agent; echo ignores it but doesn't crash
+    }
+
+    #[test]
+    fn test_agent_call_variable_prompt() {
+        register_echo();
+        let mut ev = make_evaluator();
+        ev.stdout = Arc::new(Mutex::new(Box::new(std::io::sink())));
+
+        ev.eval_statement(&var_assign("MSG", string_lit("hi from var")))
+            .unwrap();
+
+        let result = ev.eval_statement(&agent_call_node(var_ref("MSG"))).unwrap();
+        assert_eq!(result, Value::String("hi from var\n".to_string()));
+    }
+
+    #[test]
+    fn test_agent_call_session_flag() {
+        register_echo();
+        let mut ev = make_evaluator();
+        ev.stdout = Arc::new(Mutex::new(Box::new(std::io::sink())));
+        ev.session_depth = 1;
+
+        let _ = ev.eval_statement(&agent_call_node(string_lit("in session"))).unwrap();
+        // echo ignores session flag; test verifies no crash
+    }
+
+    #[test]
+    fn test_agent_call_not_registered_spawns_fallback() {
+        let mut ev = make_evaluator();
+        ev.stdout = Arc::new(Mutex::new(Box::new(std::io::sink())));
+
+        let result = ev.eval_statement(&agent_call_node(string_lit("test")));
+        // "echo" not registered, so it spawns /usr/bin/echo or similar
+        assert!(result.is_ok());
     }
 }

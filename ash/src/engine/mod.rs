@@ -79,3 +79,92 @@ pub fn register_defaults() {
     );
 
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_from_config_echo() {
+        let cfg = AgentConfig {
+            name: "echo".into(),
+            agent_type: AgentType::LocalCli,
+            driver: Some("echo".into()),
+            cmd: String::new(),
+            args: vec![],
+            model_flag: None,
+            session_flag: None,
+            message_flag: None,
+            stdin_prompt: false,
+            base_url: String::new(),
+            auth: None,
+            endpoint: ApiEndpoint { method: String::new(), path: String::new() },
+            container: ContainerConfig { runtime: String::new(), image: String::new(), mode: String::new(), volumes: vec![] },
+        };
+        let adapter = from_config(&cfg);
+        assert_eq!(adapter.name(), "echo");
+    }
+
+    #[test]
+    fn test_from_config_opencode() {
+        let cfg = AgentConfig {
+            name: "opencode".into(),
+            agent_type: AgentType::LocalCli,
+            driver: Some("opencode".into()),
+            cmd: String::new(),
+            args: vec![],
+            model_flag: None,
+            session_flag: None,
+            message_flag: None,
+            stdin_prompt: false,
+            base_url: String::new(),
+            auth: None,
+            endpoint: ApiEndpoint { method: String::new(), path: String::new() },
+            container: ContainerConfig { runtime: String::new(), image: String::new(), mode: String::new(), volumes: vec![] },
+        };
+        let adapter = from_config(&cfg);
+        assert_eq!(adapter.name(), "opencode");
+    }
+
+    #[test]
+    fn test_from_config_unknown_driver_uses_generic() {
+        let cfg = AgentConfig {
+            name: "custom-agent".into(),
+            agent_type: AgentType::LocalCli,
+            driver: Some("unknown".into()),
+            cmd: "my-cmd".into(),
+            args: vec!["run".into()],
+            model_flag: Some("--model".into()),
+            session_flag: None,
+            message_flag: None,
+            stdin_prompt: false,
+            base_url: String::new(),
+            auth: None,
+            endpoint: ApiEndpoint { method: String::new(), path: String::new() },
+            container: ContainerConfig { runtime: String::new(), image: String::new(), mode: String::new(), volumes: vec![] },
+        };
+        let adapter = from_config(&cfg);
+        assert_eq!(adapter.name(), "custom-agent");
+    }
+
+    #[test]
+    fn test_from_config_no_driver_uses_generic() {
+        let cfg = AgentConfig {
+            name: "generic".into(),
+            agent_type: AgentType::LocalCli,
+            driver: None,
+            cmd: "bin".into(),
+            args: vec![],
+            model_flag: None,
+            session_flag: None,
+            message_flag: None,
+            stdin_prompt: false,
+            base_url: String::new(),
+            auth: None,
+            endpoint: ApiEndpoint { method: String::new(), path: String::new() },
+            container: ContainerConfig { runtime: String::new(), image: String::new(), mode: String::new(), volumes: vec![] },
+        };
+        let adapter = from_config(&cfg);
+        assert_eq!(adapter.name(), "generic");
+    }
+}

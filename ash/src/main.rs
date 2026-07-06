@@ -199,6 +199,7 @@ fn cmd_discover(args: &[String]) -> i32 {
 }
 
 fn ensure_agents_registered() {
+    engine::register_defaults();
     if std::path::Path::new("ash-project.yaml").exists() {
         match engine::read_config("ash-project.yaml") {
             Ok(agents) => {

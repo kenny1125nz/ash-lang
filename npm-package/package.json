@@ -1,0 +1,18 @@
+{
+  "name": "@ash-lang/cli",
+  "version": "0.1.1",
+  "description": "Ash CLI — multi-agent orchestration",
+  "bin": {
+    "ash": "ash.js"
+  },
+  "scripts": {
+    "postinstall": "node postinstall.js"
+  },
+  "files": [
+    "ash.js",
+    "postinstall.js",
+    "README.md"
+  ],
+  "repository": "kenny1125nz/ash-lang",
+  "license": "AGPL-3.0"
+}

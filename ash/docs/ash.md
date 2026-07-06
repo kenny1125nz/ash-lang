@@ -1,28 +1,48 @@
-# Ash — Agent Shell Language Specification
+# Ash — Quick Start
 
-**Version:** 0.1.0
-**File Extension:** `.ash`
+**Version:** 0.1.0   **File Extension:** `.ash`
 
-Ash is a scripting language for composing AI coding agents (Copilot, OpenCode, Claude Code, etc.) into automated code modification workflows.
+Ash is a scripting language for composing AI coding agents into automated workflows. You tell agents what to do, and ash orchestrates their execution.
 
-Ash also supports a **directory-based orchestration mode** — a simpler way to organize agent tasks using folders and markdown or ash files. See [Directory-Based Orchestration](#directory-based-orchestration).
+See [ash-advanced.md](ash-advanced.md) for retry logic, context compacting, parallel execution, and other advanced features.
+
+---
+
+## Agent Calls
+
+The `do` statement invokes an agent:
+
+```ash
+do "Fix the login bug in src/auth/login.ts" with opencode
+```
+
+| Clause | Example | Description |
+|--------|---------|-------------|
+| `with <agent>` | `with opencode` | Which agent to invoke (opencode, claude-code, aider) |
+| `using <model>` | `using sonnet` | Override the AI model |
+
+---
+
+## CLI Flags
+
+```bash
+ash script.ash                     # run a script
+ash tasks/                         # run directory mode
+ash --check script.ash             # validate syntax only
+ash --agent opencode:sonnet        # default agent and model
+ash tasks/ --dry-run               # preview without executing
+```
 
 ---
 
 ## Directory-Based Orchestration
 
-When `ash` is invoked with a directory path instead of a `.ash` file, it switches to tree mode:
+Pass a directory to run task files in numeric-prefix order:
 
 ```bash
 ash ./tasks
 ash ./tasks --dry-run
-ash ./tasks --agent opencode:sonnet
-ash ./tasks --continue-on-error
 ```
-
-### How it works
-
-Ash walks the directory tree in depth-first order. At each level, files and subdirectories are **sorted together by numeric prefix** — a directory is descended into when its position in the sorted order is reached.
 
 ```
 tasks/
@@ -36,273 +56,47 @@ tasks/
 
 Execution order: `01-intro.md` → `02-types/01-token.md` → `02-types/02-value.md` → `02-types/03-ast.md` → `03-conclusion.md`
 
-### Task file eligibility
+Files are executed when they have a numeric prefix (`01-`, `02-`, etc.). Files with duplicate prefixes at the same level are reported as errors.
 
-Only `.md` and `.ash` files with a **numeric prefix** (`01-`, `02-`, etc.) are executed. Files that don't qualify are skipped with a `[skip]` message:
-
-- `[skip] non-task: <path>` — not a `.md` or `.ash` file
-- `[skip] no-prefix: <path>` — `.md` or `.ash` file without a numeric prefix (e.g. `readme.md`)
-- `[skip] empty: <path>` — file with only whitespace/frontmatter, no prompt content
-- Hidden files and directories (starting with `.`) are skipped silently
-
-Duplicate numeric prefixes at the same level are an error — ash reports the conflict and exits.
-
-### Per-task configuration
-
-**Markdown files (`.md`):** Each `.md` file can include YAML frontmatter to override settings:
+Markdown files (`.md`) can set per-task settings with YAML frontmatter:
 
 ```markdown
 ---
 agent: opencode
 model: sonnet
-compact: on
 on_fail: continue
 ---
 
-# Task title
+# Task Title
 
-The content of the task prompt goes here...
+The prompt content for the agent goes here...
 ```
 
-| Key       | Values                    | Description                                    |
-|-----------|---------------------------|------------------------------------------------|
-| `agent`   | agent name                | Override the default agent (e.g. `opencode`)   |
-| `model`   | model name                | Override the model (e.g. `sonnet`)             |
-| `compact` | `on`, `off`, `auto`       | Compacting behavior for this task              |
-| `on_fail` | `stop` (default), `continue` | Whether to halt or continue after failure |
-
-**Ash script files (`.ash`):** Agent and model are set via the shebang line (`#!<engine>:<version>[:<model>]`). The script body is evaluated as a standard ash program. Empty ash files are skipped.
-
-### CLI flags
-
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--dry-run` | | Print tasks without executing |
-| `--continue-on-error` | `-k` | Keep running after failures (overrides per-task `stop`) |
-| `--agent <spec>` | | Default agent and model: `agent[:model]` |
-| `--check` | `-c` | Parse and validate the script without executing (prints `OK` and exits) |
-
-### Agent discovery and config
-
-The `discover` subcommand scans the system for available agents and can generate a config file:
-
-```bash
-ash discover            # print available agents
-ash discover --write    # generate ash-project.yaml
-ash discover --force    # overwrite existing ash-project.yaml
-```
-
-On startup, ash automatically checks for `ash-project.yaml` in the current directory. If found, it loads agent configs from that file. Otherwise, it runs an automatic discovery scan and registers any found agents (echo, opencode, claude-code, aider) for the session.
-
-### Agent fallback priority
-
-1. Task frontmatter / shebang line
-2. CLI `--agent` flag
-3. Built-in default (`echo`)
-
-### Built-in agents
-
-These agents are recognized without an `ash-project.yaml` configuration file:
-
-| Agent          | Description                                      |
-|----------------|--------------------------------------------------|
-| `echo`         | Echoes the prompt back (default, useful for testing) |
-| `opencode`     | OpenCode CLI (`opencode run`)                    |
-| `claude-code`  | Claude Code CLI (`claude`)                       |
-| `aider`        | Aider CLI (`aider`)                              |
-
-Any other agent name requires an `ash-project.yaml` entry or produces a warning if no config file is found.
+Ash scripts (`.ash`) use a shebang line: `#!opencode:1.0`. Run `ash tasks/` to execute all tasks in sequence.
 
 ---
 
-## VSCode Extension
+## Session Blocks
 
-Ash ships with a VSCode extension (`ash-vscode/`) providing syntax highlighting, script execution, and validation:
-
-### Commands
-
-| Command | Description |
-|---------|-------------|
-| `Ash: Run Script` | Runs the active `.ash` file and shows output in the Ash output channel |
-| `Ash: Check Script` | Validates the active `.ash` file (dry-run) |
-| `Ash: Stop Script` | Terminates a running script |
-
-The extension is available from the context menu when editing `.ash` files. It locates the `ash` binary via PATH or bundled binaries.
-
----
-
-## Engine Declaration
-
-The first line declares the target agent and version. An optional `#!compact` line configures context management globally:
+Keep multiple `do` calls in a shared agent session:
 
 ```ash
-#!opencode:1.2.0
-#!opencode:1.2.0:sonnet
-
-#!opencode:1.2.0
-#!compact mode=on window=64000 strategy=truncate
-```
-
-Format:
-
-| Line | Pattern                          | Description                                                         |
-| ---- | -------------------------------- | ------------------------------------------------------------------- |
-| 1    | `#!<engine>:<version>[:<model>]` | **Required.** Target agent engine with version.                     |
-| 2 | `#!compact <key>=<val> ...` | **Optional.** Global compact settings. Space-separated key=val pairs. |
-
-The runtime checks the installed agent version matches the declared version.
-
----
-
-## Variables
-
-Variables are assigned without a prefix and referenced by bare name:
-
-```ash
-FILES = exec find src -name '*.ts'
-DIFF = exec git diff origin/main...HEAD
-```
-
-Reference without prefix:
-
-```ash
-MSG = "diff: ${DIFF} files: ${FILES}"
-if DIFF == "" {
-  print "no changes"
+session {
+  do "Implement the token types"
+  do "Implement the value system"
+  do "Refactor the AST"
 }
-```
-
-The `$` prefix is also accepted for backward compatibility (e.g. `$FILES`, `$DIFF`). `$?` remains the canonical form for the exit code variable.
-
-### Built-in Runtime Variables
-
-| Variable    | Set by                              | Description                                 |
-| ----------- | ----------------------------------- | ------------------------------------------- |
-| `$?`        | any agent call or exec | Exit code of the last agent call or command |
-| `${stdout}` | any agent call or exec | Stdout output from the last agent call or command |
-| `${stderr}` | any agent call or exec | Stderr output from the last agent call or command |
-| `${report}` | `try { } evaluate with { }`  | Stdout from the evaluator block            |
-
-### Array variables
-
-Variables can also hold arrays — see [§3 Arrays](#3-arrays).
-
----
-
-## Arrays
-
-Arrays are ordered, comma-separated lists of values enclosed in square brackets:
-
-```ash
-COUNTRIES = ["United States", "United Kingdom", "Canada"]
-SCORES    = [95, 87, 92, 78]
-MIXED     = ["hello", 42, true]
-EMPTY     = []
-```
-
-### Index access
-
-Access elements with zero-based index using square brackets:
-
-```ash
-COUNTRIES = ["US", "UK", "Canada"]
-print COUNTRIES[0]   # "US"
-print COUNTRIES[2]   # "Canada"
-```
-
-### Built-in functions
-
-| Function  | Description                            |
-|-----------|----------------------------------------|
-| `len(a)`  | Returns the number of elements in `a`  |
-
-### Array concatenation
-
-The `+` operator concatenates two arrays:
-
-```ash
-A = [1, 2, 3]
-B = [4, 5]
-C = A + B    # [1, 2, 3, 4, 5]
-```
-
-### Arrays in for loops
-
-`for` loops iterate over array elements directly:
-
-```ash
-for ITEM in ["apple", "banana", "cherry"] {
-  print ITEM
-}
-```
-
-### Strings still work as lists
-
-Existing newline-separated string iteration continues to work:
-
-```ash
-for ITEM in "a\nb\nc" {
-  print ITEM
-}
-```
-
----
-
-## Strings & Text Blocks
-
-### Double-quoted strings
-
-```ash
-MSG = "task ${ID} completed in ${TIME}s"
-```
-
-### Escape sequences
-
-| Escape | Result                            |
-| ------ | --------------------------------- |
-| `\"`   | Literal `"`                       |
-| `\$`   | Literal `$` (stops interpolation) |
-| `\\`   | Literal `\`                       |
-
-### Text blocks
-
-Multi-line literals delimited by triple backticks. No escape sequences — only ` ``` ` closes the block:
-
-````
-PROMPT = ```
-Fix the login bug in src/auth/login.ts.
-The error is "Invalid token" when the JWT expires.
-Use the existing retry utility in lib/retry.ts.
-```
-````
-
-Variable interpolation `${NAME}` and inline commands `$(cmd)` work inside both string types.
-
----
-
-## Includes
-
-```ash
-include "lib/prompts.ash"
-include "lib/git.ash"
-include "config/projects/${REPO_NAME}.ash"
 ```
 
 ---
 
 ## Control Flow
 
-All control structures use `{ }` for bodies, matching `try { }` and `fn { }`:
-
-### If / else if / else
+All bodies use `{ }`:
 
 ```ash
 if $? == 0 {
   print "build passed"
-}
-
-if $? == 0 {
-  print "pass"
 } else if SCORE > 0.8 {
   print "good enough"
 } else {
@@ -311,654 +105,154 @@ if $? == 0 {
 }
 ```
 
-### For
-
 ```ash
 for FILE in FILES {
   exec eslint FILE
 }
 ```
 
-### While
-
 ```ash
-while RETRIES < MAX_RETRIES {
-  do "Fix remaining issues" with subagent bug-fixer
+while RETRIES < 3 {
+  do "Fix remaining issues"
   RETRIES = RETRIES + 1
 }
 ```
-
-### Break / Continue
-
-Inside loops, `break` exits the loop and `continue` skips to the next iteration:
-
-```ash
-for FILE in FILES {
-  if FILE == "skip_this.ts" {
-    continue
-  }
-  do "Review ${FILE}" with subagent reviewer
-  if $? != 0 {
-    break
-  }
-}
-```
-
-### Expressions
-
-Comparisons and arithmetic use shell-like operators:
-
-```ash
-$? == 0            # equality
-COUNT > 5          # comparison
-OK and READY       # boolean
-not FAILED
-TOTAL + 1          # addition
-N * 2              # multiplication
-```
-
-Use parentheses for grouping: `(X > 0 and Y < 10)`.
-
-### For Splitting
-
-`for VAR in LIST` iterates over each element. When `LIST` is an array, it yields elements directly. When `LIST` is a string, it splits on **newlines** (one item per line). This matches the output of `exec find`, `exec ls`, and similar commands.
-
-### Working directory: `within`
-
-`within <path> { ... }` sets the working directory for all agent calls inside the block. The directory must already exist — the engine fails with an error if it doesn't. Inside the block, a per-agent `in <path>` clause overrides the block's directory for that single call.
-
-```ash
-within "/home/kenny/apps/agents/passport-photo" {
-  do "Research passport requirements"    # runs in that directory
-  do "Take measurements"                 # same directory
-  do "Crop image" in "/tmp"             # per-agent override
-}
-```
-
-See also the [`do` agent call syntax](#7-agent-call) for the per-agent `in` clause.
-
-### Within Toggle
-
-`within begin <path>` / `within end` change the working directory across multiple statements without a block:
-
-```ash
-within begin "/project/src"
-do "fix the login bug"
-exec cargo build
-within end
-```
-
-This is equivalent to `within "/project/src" { ... }` but allows spreading the body across multiple lines without indentation — useful in scripts with long bodies and in REPL sessions. The directory change persists until the matching `within end`.
-
-- **Nesting**: `within` toggles can be nested — each `begin` pushes the current directory onto a stack and each `end` pops and restores it.
-- **`within end` without `within begin`** is a runtime error.
-
-### Parallel execution
-
-`wait { ... }` runs all statements in the block concurrently and waits for every one to finish:
-
-```ash
-wait {
-  do "Review src/a.ts" with subagent reviewer
-  do "Review src/b.ts" with subagent reviewer
-  do "Review src/c.ts" with subagent reviewer
-}
-print "all reviews done"
-```
-
-Works with any statement — `exec`, `do`, function calls:
-
-```ash
-wait {
-  exec npm run build
-  review_and_fix("src/a.ts", "gpt-4o")
-  review_and_fix("src/b.ts", "gpt-4o")
-}
-```
-
-The `&` suffix fires a single statement in the background and continues immediately (fire-and-forget):
-
-```ash
-exec npm install &
-do "Deploy to staging" with subagent deployer &
-print "fire and forget — script continues immediately"
-```
-
----
-
-## Agent Call
-
-The core action — invoke an agent with instructions.
-
-### Syntax
-
-```
-do <prompt>
-  [with <agent> [subagent <name>]]
-  [using <model>]
-  [in <path>]
-  [compact <directive>]
-```
-
-All subclauses are optional. Their order is fixed: `with` → `subagent` → `using` → `in` → `compact`.
-
-| Part | Default | Description |
-|------|---------|-------------|
-| `do <prompt>` | required | Prompt as a string, text block, variable, or `@file.md` |
-| `with <agent>` | shebang engine | Agent instance from the [agent abstraction](enhanced-agent-abstraction.md). Selects which configured agent to invoke (e.g. `local-opencode`, `remote-coder`, `sandbox-reviewer`). |
-| `subagent <name>` | `default` | Sub-agent capability/profile within the selected agent instance |
-| `using <model>` | agent default | Override the AI model |
-| `in <path>` | `within` block's dir or none | Working directory for the agent subprocess. Directory must exist. |
-| `compact <directive>` | none | Post-agent context management (always last — runs after the agent finishes) |
-
-The `with <agent>` clause refers to an agent instance declared in the project config (see [enhanced-agent-abstraction.md](enhanced-agent-abstraction.md)). This is a **big shift** — a script is no longer tied to a single shebang engine. It can orchestrate tasks across different agent types in one script.
-
-For backward compatibility, `with subagent <name>` is shorthand for `with <shebang-engine> subagent <name>`.
-
-### Examples
-
-Basic usage with a single local agent:
-
-```ash
-do "Fix the login bug in src/auth/login.ts"
-do "Fix this" with local-opencode subagent bug-fixer
-do "Fix this" with local-opencode subagent bug-fixer using claude-sonnet-4
-do "Fix this" with local-opencode subagent bug-fixer in "/workspace" compact "truncate 32000"
-```
-
-Orchestrating across different agent types — the script selects which agent instance to use at each call:
-
-```ash
-# Code generation via local CLI
-do "Implement the user auth module" with local-opencode subagent coder
-
-# Security review via a remote SaaS agent
-do "Review auth module for vulnerabilities" with remote-security-agent subagent reviewer
-
-# Run tests inside a containerized agent
-do "Fix failing tests and verify" with sandbox-tester subagent bug-fixer
-
-# Deploy via a containerized deployer
-do "Deploy to production" with sandbox-deployer subagent deployer
-```
-
-The prompt can be a variable, text block, or external file:
-
-````
-do PROMPT with remote-coder subagent bug-fixer
-
-do ```
-  Review all uncommitted changes.
-  Check for: correctness, security, style, edge cases.
-``` with local-opencode subagent code-reviewer using gpt-4o
-
-do @skills/refactor.md with sandbox-refactorer subagent refactorer in "/project"
-do @skills/review.md with cloud-reviewer subagent code-reviewer using gpt-4o compact "truncate 16000"
-do @'play_step${n}.md' with local-opencode subagent coder    # variable in path
-do @${DIR}/prompts/task.md with remote-tester subagent tester
-````
-
-`@<path>` loads the prompt from a markdown file (relative to the script). Variables in the path are interpolated: `@'play_step${n}.md'` or `@${DIR}/file.md`. `${VAR}` and `$(cmd)` placeholders in the file content are resolved against the current scope before sending to the agent.
-
-The `in <path>` clause is typically used inside a [`within` block](#6-control-flow) to override the directory for a single agent call. When used outside a `within` block, it sets the working directory for that call only.
-
----
-
-## Session Blocks
-
-`session { }` wraps multiple `do` calls in a shared session. The agent reuses context from prior steps within the block instead of starting cold on each call:
-
-```ash
-session {
-  do "Implement the token types" with opencode
-  do "Implement the value system" with opencode
-  do "Refactor the AST" with opencode using sonnet
-}
-```
-
-Outside the block, `do` calls run one-shot with no session. This is consistent with ash's other `{}` block constructs (`if`, `for`, `while`, `try`, `wait`).
-
-### Per-agent behavior
-
-| Agent | Flag | Mechanism |
-|-------|------|-----------|
-| opencode | `--continue` | Resumes the last session in the working directory |
-| claude-code | `--continue` | Resumes the most recent conversation |
-| aider | `--restore-chat-history` | Restores previous chat history |
-
-### Rules
-
-- **Nested session blocks are an error** — a `session { }` inside another `session { }` is rejected at runtime.
-- **Session state is lexically scoped** — only `do` calls inside the `session {}` body share the session. Outside the block, session state is inactive.
-- **Agents without session support** silently accept `session { }` — `do` calls run normally, just without session flags.
-- **Compact and sessions**: compact operates normally inside a session. Outside a session, `compact` directives on `do` calls produce a warning.
-
-### Session Toggle
-
-`session begin` / `session end` open and close a session across multiple lines without a block:
-
-```ash
-session begin
-do "Implement the token types" with opencode
-do "Implement the value system" with opencode
-session end
-```
-
-This is equivalent to `session { ... }` but allows spreading `do` calls across multiple lines — ideal for REPL sessions and long scripts where deeply nested blocks become hard to read.
-
-Toggles and blocks can be mixed freely:
-
-```ash
-session begin
-  do "setup" with opencode
-  within begin "/tmp"
-    do "build in tmp"
-  within end
-session end
-```
-
-- **`session begin` inside an open session is an error** — same as nested `session { }` blocks.
-- **`session end` without `session begin` is a runtime error.**
-- **State independence**: `session begin` → `session end` → `session { }` works — the toggle form sets and clears `session_depth` just like the block form.
-
----
-
-## Retry
-
-### Binary retry (exit code based)
-
-Retries an agent call when it exits with non-zero. The `fail` block lets each retry learn from the previous failure using `${stderr}` and `${stdout}`:
-
-````
-try {
-  do "Fix all TypeScript errors in src/" with subagent bug-fixer
-} fail {
-  do ```
-Fix the remaining errors:
-${stderr}
-Files: $(find src -name '*.ts')
-  ``` with subagent bug-fixer compact "truncate 32000"
-} upto 3
-````
-
-Without `fail`, retrying the exact same prompt is pointless. The `fail` block lets each retry learn from the previous failure — inject error output, adjust instructions, or switch subagent.
-
-### Evaluated retry (three outcomes)
-
-For tasks where exit code alone is not enough, provide an evaluator that inspects the workspace and returns an outcome.
-
-**Execution flow** — the agent runs first. If it fails (exit code non-zero), the evaluator is **skipped** and execution jumps straight to `fail`:
-
-```
-1. Agent runs
-2. exit != 0  →  skip evaluator, go to fail { }
-3. exit == 0  →  run evaluate with { }
-   exit 0  = accept
-   exit 1  = partial
-   exit 2+ = fail
-```
-
-The evaluator uses its **exit code** to signal the outcome. Its stdout is available as `${report}`:
-
-````
-try {
-  do "Refactor src/auth/" with subagent refactorer
-} evaluate with {
-  do @skills/check-quality.md with subagent quality-checker
-} accept {
-  print "refactor accepted"
-} partial {
-  do "Refine based on evaluation: ${report}" with subagent refactorer
-} fail {
-  do "Reset and try different approach: ${report}" with subagent refactorer
-} upto 3
-````
-
-| Clause | Triggered when | Effect |
-|--------|---------------|--------|
-| `evaluate with { }` | Agent succeeded (exit 0) | Runs the evaluator block. Its exit code routes to accept/partial/fail. |
-| `accept { }` | Evaluator exit 0 | Exits the retry loop, continues script. |
-| `partial { }` | Evaluator exit 1 | Retries. `${report}` has evaluation findings (evaluator stdout). |
-| `fail { }` | Agent exit != 0 **or** evaluator exit >= 2 | Retries from clean state. `${report}` has error details. |
-| `${report}` | In partial / fail | Stdout from the evaluator block. |
-
-Without `evaluate with`, the simpler `fail` form applies (exit code 0 = accept, non-zero = fail).
-
----
-
-## Context Compacting
-
-Coding agents accumulate large contexts. Compact can be specified in three ways:
-
-### Per-agent subclause
-
-Attach `compact` directly to a `do` call. The engine runs the compact operation **after** the agent finishes, compressing the context before the next step:
-
-```ash
-do "Fix bugs in src/" with subagent bug-fixer compact "truncate 32000"
-do PROMPT with subagent debugger compact "window 64000 keep src/"
-```
-
-### Standalone directive
-
-Triggers a one-time compact on the current context:
-
-```ash
-compact "truncate 32000"
-compact "summarize"
-compact "drop node_modules/,dist/"
-```
-
-### Global declaration
-
-Declared in the header via a `#!compact` line — applies to every agent call in the script:
-
-```ash
-#!opencode:1.2.0
-#!compact mode=auto window=32000 strategy=truncate
-```
-
-| Key        | Values                        | Description               |
-| ---------- | ----------------------------- | ------------------------- |
-| `mode`     | `auto` (default), `on`, `off` | Whether compact is active |
-| `window`   | token count                   | Context window limit      |
-| `strategy` | `truncate`, `summarize`       | How to reduce context     |
-
-Global and standalone compact can be overridden by a per-agent `compact` clause.
-
----
-
-## Tools (Built-in)
-
-Coding agents operate on code. Ash exposes these built-ins:
-
-| Call         | Description                      |
-| ------------ | -------------------------------- |
-| `exec cmd`   | Run shell command, return stdout |
-| `include "file"` | Include another ash script       |
-| `env KEY`    | Environment variable             |
-| `print msg`  | Print message                    |
-| `exit code`  | Exit script                      |
-
-### Inline command substitution
-
-Inside strings and text blocks, `$(cmd)` runs a shell command and substitutes its stdout:
-
-````ash
-MSG = "current branch: $(git branch --show-current)"
-PROMPT = ```
-Changes:
-$(git diff --name-only)
-```
-````
-
-This differs from the statement-level `exec cmd` — `$(cmd)` is an inline expression that expands to a string.
 
 ---
 
 ## Functions
 
-### Declaration
-
 ```ash
-fn get_src_files() {
-  result = exec find src -name '*.ts'
-  return result
-}
-
 fn review(FILE, MODEL) {
-  do "Review ${FILE}" with subagent code-reviewer using MODEL
+  do "Review ${FILE}" with opencode using MODEL
 }
 
-fn deploy(ENV, TAG) {
+fn build() {
   exec npm run build
-  do "Deploy ${TAG} to ${ENV}" with subagent deployer
 }
 ```
 
-- `fn NAME(PARAM1, PARAM2) { ... }` — named parameters in parentheses, body in braces.
-- Parameters are local variables inside the block.
-- Empty parens `()` for no-argument functions.
-
-### Calling
+Call with parentheses — required for both built-in and user functions:
 
 ```ash
-src = get_src_files()
-review("src/x.ts", "gpt-4o")
-deploy("staging", "v1.2")
+FILES = get_src_files()
+review("src/auth.ts", "sonnet")
+build()
 ```
 
-- Brackets **required** — distinguishes `name()` from `exec cmd`.
-- Arguments are positional, comma-separated.
-- Return value captured via `$?` or variable assignment.
+---
 
-### Return
+## Built-in Tools
+
+| Statement | Description |
+|-----------|-------------|
+| `exec cmd` | Run a shell command |
+| `print msg` | Print output |
+| `include "file.ash"` | Load another ash script |
+| `env KEY` | Read an environment variable |
+| `exit code` | Exit the script |
+
+Inline command substitution inside strings:
 
 ```ash
-fn get_src_files() {
-  result = exec find src -name '*.ts'
-  return result
-}
-
-fn validate(CODE) {
-  if CODE == "" {
-    return "empty"
-  }
-}
+FILES = "$(find src -name '*.ts')"
 ```
 
-- `return <expr>` — exits function, sets `$?` and optionally a value.
-- No `return` → function returns exit code of the last statement.
+---
 
-### Scoping
+## Agent Discovery
 
-- Variables created inside `{ }` are **local** — not visible outside.
-- Outer variables are readable but not writable inside a function.
+```bash
+ash discover            # list available agents
+ash discover --write    # generate ash-project.yaml
+```
 
-### Error handling
+On startup, ash auto-discovers installed agents. Add custom agents to `ash-project.yaml`:
 
-Functions work naturally with `try` and `compact`:
+```yaml
+agents:
+  custom-tool:
+    type: local-cli
+    cmd: my-tool
+    message_flag: "--prompt"
+```
+
+---
+
+## REPL
+
+Run `ash` with no arguments to enter interactive mode:
+
+```bash
+$ ash
+ash> NAME = "world"
+ash> print "hello ${NAME}"
+hello world
+```
+
+Commands: `.help`, `.clear`, `.vars`, `.exit`. Up/down arrows navigate history. Multi-line blocks (`if`, `for`, `session`) auto-detect continuation.
+
+---
+
+## Variables
+
+Assign with `=` and reference by name:
 
 ```ash
-fn review_files(PATTERN, MODEL) {
-  for FILE in exec find . -name PATTERN {
-    try {
-      do "Review ${FILE}" with subagent code-reviewer using MODEL
-    } fail {
-      do "Fix errors in ${FILE}: ${stderr}" with subagent bug-fixer compact "truncate 16000"
-    } upto 2
-  }
-}
+NAME = "world"
+COUNT = 42
+MSG = "hello ${NAME}"
+```
 
-review_files("*.ts", "gpt-4o")
+Built-in variables:
+
+| Variable | Set by | Description |
+|----------|--------|-------------|
+| `$?` | `do`, `exec`, function calls | Exit code (0 = success) |
+| `stdout` | `do`, `exec` | Stdout from the last call |
+| `stderr` | `do`, `exec` | Stderr from the last call |
+
+---
+
+## Strings & Expressions
+
+Double-quoted strings with `${var}` and `$(cmd)` interpolation:
+
+```ash
+MSG = "Branch: $(git branch --show-current), user: ${USER}"
+```
+
+Expressions:
+
+```ash
+$? == 0              # equality
+COUNT > 5            # comparison
+OK and READY         # boolean logic
+not FAILED
+TOTAL + 1            # arithmetic
+N * 2                # multiplication
+(X > 0 and Y < 10)   # grouping
 ```
 
 ---
 
 ## Complete Example
 
-````ash
-#!opencode:1.2.0
-#!compact mode=on strategy=truncate window=64000
-
-include "lib/prompts.ash"
-include "lib/review.ash"
-
-fn review_and_fix(FILE, MODEL) {
-  try {
-    do "Review ${FILE} for bugs and performance issues" with subagent code-reviewer using MODEL
-  } evaluate with {
-    do "Check if review addressed all issues in ${FILE}" with subagent quality-checker
-  } accept {
-    print "${FILE} looks good"
-  } partial {
-    do "Refine: ${report}" with subagent code-reviewer compact "truncate 16000"
-  } fail {
-    do "Reset and re-review: ${report}" with subagent code-reviewer
-  } upto 2
+```ash
+fn review(FILE) {
+  do "Review ${FILE} for bugs" with opencode
 }
 
-for FILE in exec find src -name '*.ts' {
-  review_and_fix(FILE, "gpt-4o")
+FILES = $(find src -name '*.ts')
+for FILE in FILES {
+  review(FILE)
 }
 
 exec npm test
-if $? != 0 {
-  try {
-    do "Fix test failures in $(git diff --name-only -- '*.test.ts')" with subagent bug-fixer
-  } fail {
-    do ```
-Previous fix failed. Errors:
-${stderr}
-    ``` with subagent bug-fixer
-  } upto 3
-
-  exec npm test
-  if $? != 0 {
-    print "tests still failing, aborting"
-    exit 1
-  }
+if $? == 0 {
+  print "all good"
+} else {
+  print "tests failed"
+  exit 1
 }
-
-compact "truncate 16000"
-do "Deploy to staging" with subagent deployer
-````
-
----
-
-## Interactive Mode (REPL)
-
-When `ash` is invoked with no arguments and stdin is a terminal (TTY), it enters an interactive REPL. The REPL has two modes depending on how stdin is connected:
-
-### TTY mode (line editing with history)
-
-When running in a terminal, the REPL uses the **rustyline** library to provide full line editing with arrow key navigation, command history, and prompt support:
-
-```bash
-$ ash
-ash REPL. Type .help for commands, Ctrl-D to exit.
-
-ash> NAME = "world"
-ash> print "hello ${NAME}"
-hello world
-ash> 2 + 2
-4
-ash> <Up>                   # recalls previous line
-ash> <Left>/<Right>        # cursor navigation within line
 ```
-
-**Features:**
-- **Arrow keys**: Up/Down cycle through command history; Left/Right move the cursor within the current line
-- **In-memory history**: All entered commands are stored for the duration of the session
-- **Ctrl-C**: Cancels the current multi-line input and returns to the `ash> ` prompt
-- **Ctrl-D**: Exits the REPL (EOF)
-
-### Line accumulation
-
-Block constructs (`if`, `for`, `while`, `fn`, `try`, `session`, `within`, `wait`) support multi-line entry. The REPL shows `... ` until the block is complete:
-
-```bash
-ash> if true {
-...   print "inside if"
-...   session {
-...     do "task with session"
-...   }
-... }
-```
-
-A trailing `\` continues the line without a newline:
-
-```bash
-ash> do "explain closures in JavaScript \
-... with examples" with opencode
-```
-
-Press **Ctrl-C** to cancel multi-line input and return to the `ash> ` prompt.
-
-### Expression results
-
-Expressions are evaluated immediately and their results are printed. Statement forms (`print`, `exec`, `do`, `if`, `for`, `while`, etc.) do not print a result — only their side effects (output, agent calls, variable assignments).
-
-### REPL commands
-
-| Command | Description |
-|---------|-------------|
-| `.help` | Print available commands and usage |
-| `.clear` | Clear all variables and reset scope |
-| `.vars` | List all variables and their current values |
-| `.exit` | Exit the REPL |
-
-### Piped input (non-TTY mode)
-
-When stdin is not a terminal (e.g., `echo "print 42" | ash`), ash reads input line-by-line with no prompt, no line editing, and no history — suitable for scripting and one-shot evaluation:
-
-```bash
-$ echo 'print "hello"' | ash
-hello
-$ echo 'if true { print "yes" }' | ash
-yes
-```
-
-This mode uses plain `stdin.read_line()` and behaves identically to the original REPL before line editing was added. Block constructs and line continuation work the same way as in TTY mode.
-
----
-
----
-
-## Logging System
-
-Ash writes structured logs to a file using the `log` crate facade. Logging is configured via environment variables:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ASH_LOG` | `warn` | Minimum log level: `error`, `warn`, `info`, `debug`, `trace` |
-| `ASH_LOG_FILE` | `ash.log` | Path to the log file (appended to on each run) |
-
-### Log levels
-
-| Level   | Purpose                         |
-| ------- | ------------------------------- |
-| `error` | Recoverable failures            |
-| `warn`  | Unexpected but non-fatal states |
-| `info`  | Major lifecycle events          |
-| `debug` | High-level flow tracing         |
-| `trace` | Detailed function-level logging |
-
-### Log output format
-
-Each line: `{timestamp} [{level}] {module} — {message}`
-
-Example:
-```
-2025-07-06T14:30:01.123456Z [info] engine — dispatching task tasks/ready/04-github.md
-2025-07-06T14:30:01.654321Z [debug] agent — connecting to opencode at localhost:8080
-2025-07-06T14:30:02.000001Z [error] agent — connection refused, retry 1/3
-```
-
-### Instrumented integration points
-
-- **Engine startup / shutdown** — `info!` at start, `info!` on exit
-- **Task file load and dispatch** — `info!` for task tree walk, `debug!` per loaded file
-- **Agent connect / send / receive** — `info!` on connect, `debug!` on request, `trace!` on stdout/stderr lines
-- **File read / write** — `debug!` on file reads in interpolation and tree walker
-- **Scope entry / exit** — `trace!` on push/pop
-
-### Usage
-
-```bash
-ASH_LOG=debug ash run tasks/
-ASH_LOG=info ash tasks/ready/
-ASH_LOG=trace ash script.ash 2>/dev/null
-```
-
----
-
-## TODO
-
-### 1. Human in the Loop
-
-See [human-in-the-loop.md](human-in-the-loop.md) for the design proposal covering approval, choice, input, edit, actor declaration, and open questions.
-
-### 2. Enhanced Agent Abstraction
-
-See [enhanced-agent-abstraction.md](enhanced-agent-abstraction.md) for the design proposal covering the Adapter/LocalCLIDriver abstraction, agent types (local CLI, remote API, containerized, in-browser), agent config, project-level config, and key design properties.

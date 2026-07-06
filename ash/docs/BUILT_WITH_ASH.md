@@ -1,247 +1,273 @@
 # Built with Ash
 
-> **Ash** fuses deterministic control flow with AI autonomy — a scripting language where the structure is rigid and the steps are intelligent.
+> Ash runs a folder of markdown files through AI agents — in numbered order. When you need loops, variables, or complex logic, `.ash` scripts give you the full pipeline.
 
 ---
 
-## The Problem
+## What Ash Is
 
-AI agents are advancing rapidly. They're increasingly capable of handling ambiguity, exercising judgment, and producing quality results from natural language prompts alone. For many tasks, a well-crafted prompt is all you need.
+Ash is a **task runner for AI agents**. Drop markdown files in a folder, number them, and run `ash tasks/`. Each file is one task sent to an AI agent. Frontmatter sets the agent and model. Output flows between steps.
 
-But **for certain classes of work, deterministic control remains the optimum answer** — regardless of how capable the AI becomes:
+That's the core. No scripting required.
 
-- **Workflows as code.** A multi-step process — review, fix, test, deploy — should live in a file you can commit, version, share, and rerun. Not buried in a chat thread or someone's head.
-- **Repeatability.** A CI pipeline, a failing test suite, a recurring report — these need to run the same way every time, even if the content of each step varies.
-- **Guaranteed sequencing.** "First fix, then test, then review, and only deploy if all three pass" — this is a property of the control flow, not the intelligence of any single step.
-- **Bounded autonomy.** You want an agent to exercise judgment within a step, not to decide whether the step happens at all, or how many times, or what comes next.
-- **Execution efficiency.** Ever watched an AI agent think for ages about a step that should be instant? When the agent drives the entire workflow, every decision — even "what next?" — burns tokens and adds latency. Pre-determined control flow runs at CPU speed: branching, looping, and sequencing happen in microseconds. AI time is spent only where it adds value: the autonomous work within each step.
-
-**What we need is a fusion of the two.** Deterministic control where it's the right tool: sequencing, branching, retry limits, evaluation gates, parallel coordination. AI autonomy where it shines: understanding intent, handling variation, making judgment calls within a step. Not because one is weak, but because each is optimal for different parts of the problem.
-
-Ash scripts can invoke agents. Agents can invoke scripts. The boundary dissolves — you're composing both in a single, version-controlled artifact, each doing what it does best.
-
-**Ash fuses deterministic structure with AI autonomy. Not as a workaround. As the optimal architecture.**
+As your tasks grow more complex, ash grows with you — `.ash` files can live in the same directory tree, and standalone `.ash` scripts give you a compact language for loops, retries, and conditional pipelines.
 
 ---
 
-## What Ash Does
+## Directory Mode — the 80% case
 
-Ash is a scripting language where the control flow is deterministic but the steps are autonomous. You write the skeleton — the gates, the retry policy, the evaluation criteria — and AI agents fill in the flesh. The same script runs the same way every time, but each agent invocation brings intelligence to the step it owns.
+```
+tasks/
+├── 01-research.md
+├── 02-implement.md
+├── 03-review.ash
+└── 04-deploy.md
+```
+
+```bash
+$ ash tasks/
+[1/4] tasks/01-research.md  [ok]
+[2/4] tasks/02-implement.md [ok]
+[3/4] tasks/03-review.ash   [ok]
+[4/4] tasks/04-deploy.md    [ok]
+4 tasks, 4 passed
+```
+
+### Markdown tasks
+
+The simplest unit of work. The body is the prompt. Frontmatter sets the
+agent and model:
+
+```markdown
+---
+agent: opencode
+model: sonnet
+---
+
+# Research the login system
+
+Trace all files related to the login flow. For each file document its
+responsibilities, inputs, and test coverage.
+```
+
+State passes naturally: `${stdout}` from task 1 is available in task 2.
+`$?` holds the exit code of the previous task.
+
+By default a failed task stops the run. Set `on_fail: continue` in
+frontmatter to keep going — useful for non-critical steps.
+
+### Ash tasks in the tree
+
+When a single prompt isn't enough for one step, drop an `.ash` file into
+the tree instead of a `.md` file. It runs as a mini-script with full
+access to the language:
 
 ```ash
-#!opencode:1.2.0
+#!opencode:1.0
 
-# Load a prompt from a file — no inline walls of text
-# Run a shell command as a step: compile, test, lint, whatever
-# Let the agent decide how to handle the result
+RESULT = $(npm test 2>&1)
+if $? != 0 {
+  do "The tests failed. Fix the errors below and recompile.
 
-for FILE in exec git diff --name-only origin/main...HEAD {
-  exec prettier --write FILE
-  exec eslint FILE
+Test output:
+${RESULT}" with opencode
+}
+```
 
+`.ash` files use a shebang line (`#!opencode:1.0`) to declare the
+default agent. They can define variables, call shell commands, branch
+on results, and invoke agents — all within one step of the directory
+pipeline. The output still flows into the next task as `${stdout}`.
+
+Markdown and ash files sort together by numeric prefix. You choose which
+format fits each step.
+
+### Agent discovery
+
+```bash
+ash discover            # list installed agents
+ash discover --write    # generate ash-project.yaml
+```
+
+Nested folders create hierarchy. Prefixes enforce order. Duplicates are
+caught before anything runs. It's a build system for AI tasks.
+
+---
+
+## Standalone Ash Scripts — when the whole pipeline needs logic
+
+Sometimes the workflow itself needs programming — not just one step,
+but the entire orchestration: iterate over every changed file, review
+each one, retry on failure, run tests, branch the deployment.
+
+For this you write a standalone `.ash` file:
+
+```ash
+fn review(FILE) {
   try {
-    do @prompts/review.md with subagent code-reviewer
-  } evaluate with {
-    do @prompts/quality-check.md with subagent reviewer
-  } accept {
-    print "${FILE} — passed"
-  } partial {
-    do "Refine: ${report}" with subagent code-reviewer
+    do "Review ${FILE} for bugs" with opencode
   } fail {
-    exec git checkout -- FILE
-    print "${FILE} — reverted, needs manual review"
+    do "Fix the remaining issues: ${stderr}" with opencode
   } upto 2
 }
 
-try {
-  exec npm run build
-} fail {
-  do "The build failed. Fix the errors below and recompile.
+FILES = $(find src -name '*.ts')
+for FILE in FILES {
+  review(FILE)
+}
 
-Build output:
-${stderr}" with subagent bug-fixer
-} upto 3
-
-if $? != 0 {
-  print "build still failing after 3 attempts"
+exec npm test
+if $? == 0 {
+  print "all good"
+} else {
+  print "tests failed after retries"
   exit 1
 }
 ```
 
-A more deeply fused scenario: the agent itself decides to call an Ash script as a tool, which in turn orchestrates more agents. The prompt file tells the agent what tools are available:
-
-```markdown
-# prompts/incident-response.md
-
-You are an on-call diagnostician. Investigate the production incident
-using the logs and metrics available on the system.
-
-If a workaround is needed to restore service now:
-  - Call `ash apply_fix.ash <component>` to apply the workaround.
-  - The script handles the operational change and checks that service is restored.
-
-Always open a follow-up ticket for the permanent fix. This is for
-incident resolution, not root cause.
+```
+$ ash review.ash
+all good
 ```
 
-The agent bridges the prompt instructions to the script:
+### Core language features
 
-```ash
-#!opencode:1.2.0
+The language is small — designed to be readable by someone who doesn't
+write code, and predictable enough that an LLM can generate it reliably.
 
-do @prompts/incident-response.md with subagent diagnostician
-```
+| Feature | Syntax | What it does |
+|---------|--------|--------------|
+| Agent call | `do "prompt" with opencode` | Send a prompt to an AI agent |
+| Variables | `NAME = "value"` | Store and reference data |
+| Strings | `"hello ${NAME}"`, `$(cmd)` | Interpolation and command substitution |
+| Shell commands | `exec cmd` | Run a command, capture output |
+| Conditionals | `if ... else if ... else` | Branch on exit codes and expressions |
+| Loops | `for X in LIST`, `while COND` | Iterate or loop with a condition |
+| Functions | `fn name(params) { ... }` | Reusable blocks with parameters |
+| Retry | `try { } fail { } upto N` | Retry a failed agent call with learning context |
+| Session | `session { ... }` | Group calls in a shared agent context |
+| Parallel | `wait { ... }` | Run multiple agent tasks concurrently |
+| Includes | `include "file.ash"` | Load another script |
 
-The same pattern turns Ash workflows into reusable skills. Define the skill as a markdown file that the agent reads — describing when to invoke the tool — with an Ash script as the implementation:
-
-```markdown
-# skills/content-writer.md
-
-You are a content writer. When asked to create a blog post:
-
-1. Research the topic thoroughly using available sources.
-2. Draft the post in a clear, engaging style.
-3. Once the draft is complete, call the publish workflow:
-
-   ash publish_workflow.ash TOPIC="<topic>"
-
-The publish workflow handles review, quality checks, and rendering.
-Do not attempt to publish the post yourself — always use the workflow.
-```
-
-```ash
-#!opencode:1.2.0
-# publish_workflow.ash — the deterministic pipeline behind the skill
-
-TOPIC = env ASH_TOPIC
-
-do @prompts/review.md with subagent editor
-do @prompts/fact-check.md with subagent researcher
-
-exec pandoc draft.md -o "posts/${TOPIC}.pdf"
-print "${TOPIC} — published"
-```
-
-The skill file is what the agent reads — it defines behavior and delegates the publish step to a script. The Ash script is the deterministic pipeline: review, fact-check, render. Three steps, fixed order, no ambiguity.
+See [ash.md](ash.md) for the full language reference.
 
 ---
 
-## Key Capabilities
+## Progressive Complexity
 
-### Deterministic Structure, Autonomous Steps
-Ash gives you rigid, predictable control flow — sequencing, branching, retry limits, evaluation gates, parallel coordination — while each individual step is executed autonomously by an AI agent. You decide *what must happen, in what order, under which conditions, with what guardrails*. The agent decides *how to do it*. The script runs the same way every time; the agent handles the ambiguity.
+You never face more complexity than you need. Start at level 1, add one
+concept at a time:
 
-### Agents Can Call Scripts, Scripts Can Call Agents
-This is not a one-way orchestration layer. An Ash script can invoke agents as steps. An agent can invoke an Ash script as a tool. That script might invoke more agents, which might invoke more scripts. This creates a **fused system** — deterministic and intelligent execution woven into a single runtime, not stacked in layers.
-
-### Retry with Learning
-Agents fail. Ash's `try/evaluate/fail` blocks give retries context from previous attempts via `${stderr}`, `${stdout}`, and `${report}`, so each retry learns from the last failure instead of repeating the same mistake.
-
-### Parallel Execution
-`wait { ... }` runs all enclosed statements concurrently and waits for completion. Fire-and-forget with `&` for background tasks. Review 20 files in parallel, then run tests.
-
-### Context Compacting
-Agent context windows are finite. Ash provides `compact` directives — per-agent, standalone, or global — to truncate or summarize context before it overflows. No more degraded output from bloated context.
-
-### Natural but Deterministic
-Ash reads like pseudocode, not configuration. Variables, `if`/`else`, `for`/`while`, functions with parameters, string interpolation — familiar constructs that anyone can follow at a glance. But the execution is rigid: branching, looping, and sequencing are controlled by the script, not by an LLM deciding what to do next. The syntax is approachable; the behavior is predictable.
-
-### Works With Your Tools
-`.ash` files are plain text. Commit them, review them in PRs, run them in CI, run them on a schedule — they work with whatever version control, automation, and collaboration tools you already use.
+| Level | What you use | What you get |
+|-------|-------------|--------------|
+| 1 | Folder of `.md` files | Sequential AI task execution |
+| 2 | YAML frontmatter | Per-task agent, model, `on_fail` |
+| 3 | `.ash` files in the tree | Logic within a single step |
+| 4 | `${stdout}`, `$?` | State passing between tasks |
+| 5 | Standalone `.ash` scripts | Full orchestration: loops, retry, parallelism |
 
 ---
 
-## Language Features at a Glance
+## Why This Model
 
-| Feature | Syntax |
-|---|---|
-| Variables | `NAME = "value"`, reference by bare name |
-| Arrays | `["a", "b", "c"]`, index with `arr[0]`, concatenate with `+` |
-| Agent call | `do "prompt" with subagent profile` |
-| Shell commands | `exec cmd`, inline `$(cmd)` |
-| String interpolation | `"hello ${NAME}"` |
-| Conditionals | `if` / `else if` / `else` |
-| Loops | `for VAR in LIST`, `while COND` |
-| Functions | `fn name(params) { ... }` |
-| Retry | `try { } fail { } upto N` |
-| Evaluated retry | `try { } evaluate with { } accept { } partial { } fail { } upto N` |
-| Parallel | `wait { ... }`, `{ ... } &` |
-| Working directory | `within <path> { ... }`, per-agent `in <path>` |
-| Context management | `compact "truncate 32000"` |
-| Includes | `include "lib/prompts.ash"` |
-| File prompts | `do @skills/review.md with subagent reviewer` |
-| Exit code | `$?` |
-| Engine declaration | `#!opencode:1.2.0` |
+AI agents are good at handling ambiguity within a step — understanding
+intent, making judgment calls, handling variation. They're bad at
+sequencing, branching, retrying, and deciding *what to do next*.
+
+Ash gives you the best of both: **deterministic control flow** where it
+matters (what runs, in what order, under what conditions, with what
+guardrails) and **AI autonomy** where it shines (the content of each step).
+
+The script runs the same way every time. The agent handles ambiguity
+within each step. You decide the skeleton. The AI fills in the flesh.
+
+This is the same model as human delegation. A manager's process is rigid
+— assign, review, accept, escalate. The worker's output varies. The
+value is in encoding the process, not guaranteeing the outcome.
 
 ---
 
-## Why Not Just Use a Shell Script?
+## Agent-Agnostic
 
-Shell scripts give you determinism. AI agents give you autonomy. Neither alone is the optimal architecture for multi-step intelligent workflows.
+Ash doesn't ship with AI models. It doesn't call APIs directly. It
+invokes whatever agent CLI tools are on your system — opencode, Claude
+Code, Aider, or a custom tool defined in `ash-project.yaml`:
 
-- **Shell scripts** are deterministic and repeatable, but every step must be explicitly coded — they can't handle the ambiguity, judgment, or creative variation that agents excel at.
-- **Prompt-only workflows** are flexible and intelligent, but they're a single opaque step — no structured retry, no evaluation gates, no guaranteed sequencing.
-- **Layering one on the other** (a script that calls an agent once) is shallow — you get one autonomous step inside a rigid shell, not a deeply fused system.
+```yaml
+agents:
+  opencode:
+    type: local-cli
+    cmd: opencode
+    args: ["run"]
+    model_flag: "--model"
+    session_flag: "--continue"
 
-Ash is the fusion point:
+  custom-tool:
+    type: local-cli
+    cmd: my-agent
+    message_flag: "--prompt"
+```
 
-- **Structured retry** — not "call this again", but "retry up to N times, feeding the last attempt's output as learning context, with a deterministic evaluation gate"
-- **Evaluation gates** — an agent step must pass a check (by another agent) before the workflow proceeds; the criteria are encoded, the judgment is autonomous
-- **Scoped parallelism** — `wait { ... }` groups concurrent work with proper scope isolation and deterministic completion semantics
-- **Cross-engine portability** — the shebang line decouples your workflow from any specific agent implementation
-- **Bidirectional calling** — agents can invoke Ash scripts as tools, scripts can invoke agents as steps; the runtime is shared, not stacked
-
-Ash is a few hundred lines of Go, compiles to a single static binary, and runs anywhere.
+Swap providers without touching your workflows. The config decides
+which binaries to invoke; the tasks and scripts describe what to do.
 
 ---
 
-## Use Cases
+## Why Not a Shell Script?
 
-Ash is domain-agnostic. Here are examples across different domains:
+Shell scripts are deterministic. AI agents are autonomous. Neither
+alone handles the multi-step intelligent workflow pattern:
 
-### Software Engineering
-**Automated PR Review.** Run a reviewer across changed files, a quality-checker evaluator to verify, and a fixer on any failures — all in parallel.
+- Shell scripts are rigid — every step must be explicitly coded. They
+  can't handle ambiguity, judgment, or creative variation.
+- AI chat threads are opaque — no structured retry, no evaluation gates,
+  no guaranteed sequencing, no version control.
+- Ash fuses them: deterministic control where it's optimal, AI autonomy
+  where it shines.
 
-**Batch Refactoring.** "Rename this pattern across 200 files." Split the work, run it in parallel, compact context between batches.
+---
 
-**CI Pipeline.** Run tests, capture failures, feed them to a bug-fixer, retry with learning, and only fail the build if the agent can't fix it after N attempts.
+## Why Not a Visual Tool?
 
-### Content & Publishing
-**Automated Newsletter.** Pull topics from a data source, generate drafts with a writer agent, have an editor evaluate quality, retry weak drafts, and compile the final issue.
+Visual workflow tools (n8n, Zapier) give you drag-and-drop, but their
+internal representation is unreadable JSON. Lose the tool, lose the
+workflow.
 
-**Documentation Sync.** For each changed API endpoint, have a documenter update the reference docs, a reviewer check for accuracy, and publish on pass.
-
-### Research & Analysis
-**Competitive Intelligence.** Run a researcher agent across N competitors in parallel, collect findings, feed to an analyst agent for synthesis, produce a report.
-
-**Data Pipeline.** Extract data via `exec` commands, feed to an analyst agent for interpretation, iterate with `evaluate` to sharpen insights, output structured results.
-
-### Operations
-**Incident Response.** On alert, run a diagnostician agent against logs, a remediator if root cause found, escalate to human if unresolved after N retries.
-
-**Scheduled Audits.** Weekly: check configs for drift, have a compliance agent review against policy, generate a report card.
-
-### Onboarding
-Give new team members `.ash` scripts that encode your team's AI workflows — code review, writing style, research process — so they can run a proven process from day one instead of learning by trial and error.
+Ash workflows are plain markdown and text. They're version-controllable,
+diffable, searchable, reviewable in any editor. An LLM can generate
+them. A CI system can run them. They survive any specific tool.
 
 ---
 
 ## Getting Started
 
 ```bash
-# Install
-go install github.com/agentic-coding/ash/cmd/ash@latest
+# Create a task folder
+mkdir my-tasks
 
-# Write a workflow
-cat > review.ash << 'EOF'
-#!opencode:1.2.0
-for FILE in exec git diff --name-only origin/main...HEAD {
-  do "Review ${FILE}" with subagent code-reviewer
-}
+cat > my-tasks/01-hello.md << 'EOF'
+---
+agent: opencode
+---
+
+# Hello Task
+
+Print "Hello from ash" and explain how the markdown task system works.
 EOF
 
-# Run it
-ash review.ash
+# Discover installed agents
+ash discover
+
+# Run the task
+ash my-tasks/
 ```
 
-Ash is **open source**, **language-agnostic**, and **agent-agnostic**. Whatever your agents can do, Ash can orchestrate.
+```
+[1/1] my-tasks/01-hello.md  [ok]
+1 tasks, 1 passed
+```
+
+When you need more — loops, retries, parallelism — graduate to [`.ash` scripts](ash.md).
+
+Ash is **open source**, **language-agnostic**, and **agent-agnostic**. Whatever agents
+you run, ash can orchestrate them.

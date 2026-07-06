@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    name: Build & Test (ubuntu)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build --verbose
+      - run: cargo test --verbose
+
+  release:
+    name: Release (${{ matrix.target }})
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-and-test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact: ash
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            artifact: ash
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            artifact: ash
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            artifact: ash.exe
+    defaults:
+      run:
+        working-directory: ash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - run: cargo build --release --target ${{ matrix.target }}
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: ash/target/${{ matrix.target }}/release/${{ matrix.artifact }}
+
+  github-release:
+    name: Create GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+      - name: Prepare binaries
+        run: |
+          mkdir dist
+          cp x86_64-unknown-linux-gnu/ash dist/ash-linux-x64
+          cp x86_64-apple-darwin/ash dist/ash-darwin-x64
+          cp aarch64-apple-darwin/ash dist/ash-darwin-arm64
+          cp x86_64-pc-windows-msvc/ash.exe dist/ash-win-x64.exe
+      - name: Generate changelog
+        run: |
+          git log $(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || git rev-list --max-parents=0 HEAD)..HEAD --oneline > dist/CHANGELOG.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: dist/CHANGELOG.txt
+          files: |
+            dist/ash-linux-x64
+            dist/ash-darwin-x64
+            dist/ash-darwin-arm64
+            dist/ash-win-x64.exe

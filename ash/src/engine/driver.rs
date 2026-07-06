@@ -151,3 +151,160 @@ impl LocalCliDriver for GenericDriver {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engine::config::{ApiEndpoint, ContainerConfig};
+    use crate::engine::types::AgentType;
+
+    fn make_config() -> AgentConfig {
+        AgentConfig {
+            name: "test-agent".into(),
+            agent_type: AgentType::LocalCli,
+            driver: None,
+            cmd: "test-bin".into(),
+            args: vec![],
+            model_flag: None,
+            session_flag: None,
+            message_flag: None,
+            stdin_prompt: false,
+            base_url: String::new(),
+            auth: None,
+            endpoint: ApiEndpoint {
+                method: String::new(),
+                path: String::new(),
+            },
+            container: ContainerConfig {
+                runtime: String::new(),
+                image: String::new(),
+                mode: String::new(),
+                volumes: vec![],
+            },
+        }
+    }
+
+    fn make_req(prompt: &str) -> ExecuteRequest {
+        ExecuteRequest {
+            prompt: prompt.into(),
+            model: String::new(),
+            dir: String::new(),
+            session: false,
+        }
+    }
+
+    #[test]
+    fn test_basic_no_flags() {
+        let cfg = make_config();
+        let driver = GenericDriver::new(cfg);
+        let spec = driver.build_command(&make_req("hello"));
+        assert_eq!(spec.cmd, "test-bin");
+        assert_eq!(spec.args, vec!["hello"]);
+        assert!(!spec.stdin_prompt);
+    }
+
+    #[test]
+    fn test_prefix_args() {
+        let mut cfg = make_config();
+        cfg.args = vec!["run".into(), "--verbose".into()];
+        let driver = GenericDriver::new(cfg);
+        let spec = driver.build_command(&make_req("hello"));
+        assert_eq!(spec.args, vec!["run", "--verbose", "hello"]);
+    }
+
+    #[test]
+    fn test_model_flag_with_model() {
+        let mut cfg = make_config();
+        cfg.model_flag = Some("--model".into());
+        let mut req = make_req("hello");
+        req.model = "sonnet".into();
+        let driver = GenericDriver::new(cfg);
+        let spec = driver.build_command(&req);
+        assert_eq!(spec.args, vec!["--model", "sonnet", "hello"]);
+    }
+
+    #[test]
+    fn test_model_flag_omitted_when_model_empty() {
+        let mut cfg = make_config();
+        cfg.model_flag = Some("--model".into());
+        let driver = GenericDriver::new(cfg);
+        let spec = driver.build_command(&make_req("hello"));
+        assert_eq!(spec.args, vec!["hello"]);
+    }
+
+    #[test]
+    fn test_session_flag_when_active() {
+        let mut cfg = make_config();
+        cfg.session_flag = Some("--continue".into());
+        let mut req = make_req("hello");
+        req.session = true;
+        let driver = GenericDriver::new(cfg);
+        let spec = driver.build_command(&req);
+        assert_eq!(spec.args, vec!["--continue", "hello"]);
+    }
+
+    #[test]
+    fn test_session_flag_omitted_when_inactive() {
+        let mut cfg = make_config();
+        cfg.session_flag = Some("--continue".into());
+        let driver = GenericDriver::new(cfg);
+        let spec = driver.build_command(&make_req("hello"));
+        assert_eq!(spec.args, vec!["hello"]);
+    }
+
+    #[test]
+    fn test_message_flag() {
+        let mut cfg = make_config();
+        cfg.message_flag = Some("--msg".into());
+        let driver = GenericDriver::new(cfg);
+        let spec = driver.build_command(&make_req("hello"));
+        assert_eq!(spec.args, vec!["--msg", "hello"]);
+    }
+
+    #[test]
+    fn test_stdin_prompt_true() {
+        let mut cfg = make_config();
+        cfg.stdin_prompt = true;
+        let driver = GenericDriver::new(cfg);
+        let spec = driver.build_command(&make_req("hello"));
+        assert!(spec.stdin_prompt);
+        assert!(spec.args.is_empty());
+    }
+
+    #[test]
+    fn test_all_flags_together() {
+        let mut cfg = make_config();
+        cfg.args = vec!["run".into()];
+        cfg.model_flag = Some("--model".into());
+        cfg.session_flag = Some("--continue".into());
+        cfg.message_flag = Some("--msg".into());
+        let mut req = make_req("fix the bug");
+        req.model = "sonnet".into();
+        req.session = true;
+        let driver = GenericDriver::new(cfg);
+        let spec = driver.build_command(&req);
+        assert_eq!(
+            spec.args,
+            vec!["run", "--model", "sonnet", "--continue", "--msg", "fix the bug"]
+        );
+    }
+
+    #[test]
+    fn test_session_without_message_flag() {
+        let mut cfg = make_config();
+        cfg.session_flag = Some("--continue".into());
+        let mut req = make_req("hello");
+        req.session = true;
+        let driver = GenericDriver::new(cfg);
+        let spec = driver.build_command(&req);
+        assert_eq!(spec.args, vec!["--continue", "hello"]);
+    }
+
+    #[test]
+    fn test_no_flags_no_prefix_args() {
+        let cfg = make_config();
+        let driver = GenericDriver::new(cfg);
+        let spec = driver.build_command(&make_req(""));
+        assert_eq!(spec.args, vec![""]);
+    }
+}
