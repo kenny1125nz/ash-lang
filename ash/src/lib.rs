@@ -10,6 +10,7 @@ pub mod executor;
 pub mod engine;
 pub mod eval;
 pub mod tree;
+#[cfg(feature = "repl")]
 pub mod repl;
 pub mod log;
 

@@ -341,6 +341,7 @@ fn run() -> i32 {
             }
         }
     } else {
+        #[cfg(feature = "repl")]
         if ash::repl::is_tty() {
             ensure_agents_registered(config_override.as_deref());
             let mut eval = Evaluator::new();

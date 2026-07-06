@@ -6,4 +6,8 @@ edition = "2021"
 [dependencies]
 regex = "1"
 log = { version = "0.4", features = ["std"] }
-rustyline = "14"
+rustyline = { version = "14", optional = true }
+
+[features]
+default = ["repl"]
+repl = ["rustyline"]
