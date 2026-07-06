@@ -3,6 +3,7 @@ pub mod api;
 pub mod browser;
 pub mod config;
 pub mod container;
+pub mod discovery;
 pub mod driver;
 pub mod types;
 
@@ -11,6 +12,7 @@ pub use api::ApiAdapter;
 pub use browser::{BrowserAdapter, BrowserFallback};
 pub use config::{AgentConfig, ApiEndpoint, AuthConfig, ContainerConfig};
 pub use container::ContainerAdapter;
+pub use discovery::{discover, discover_and_register, discovery_summary, generate_yaml, print_discovery, write_config, DiscoveryResult};
 pub use driver::{AiderDriver, ClaudeDriver, CommandSpec, EchoDriver, LocalCliDriver, OpenCodeDriver};
 pub use types::{AgentType, ExecuteRequest, ExecuteResponse};
 

@@ -82,13 +82,17 @@ The content of the task prompt goes here...
 | `--agent <spec>` | | Default agent and model: `agent[:model]` |
 | `--check` | `-c` | Parse and validate the script without executing (prints `OK` and exits) |
 
-The `discover` subcommand scans for available agents and can generate a config file:
+### Agent discovery and config
+
+The `discover` subcommand scans the system for available agents and can generate a config file:
 
 ```bash
 ash discover            # print available agents
 ash discover --write    # generate ash-project.yaml
 ash discover --force    # overwrite existing ash-project.yaml
 ```
+
+On startup, ash automatically checks for `ash-project.yaml` in the current directory. If found, it loads agent configs from that file. Otherwise, it runs an automatic discovery scan and registers any found agents (echo, opencode, claude-code, aider) for the session.
 
 ### Agent fallback priority
 
@@ -108,6 +112,22 @@ These agents are recognized without an `ash-project.yaml` configuration file:
 | `aider`        | Aider CLI (`aider`)                              |
 
 Any other agent name requires an `ash-project.yaml` entry or produces a warning if no config file is found.
+
+---
+
+## VSCode Extension
+
+Ash ships with a VSCode extension (`ash-vscode/`) providing syntax highlighting, script execution, and validation:
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `Ash: Run Script` | Runs the active `.ash` file and shows output in the Ash output channel |
+| `Ash: Check Script` | Validates the active `.ash` file (dry-run) |
+| `Ash: Stop Script` | Terminates a running script |
+
+The extension is available from the context menu when editing `.ash` files. It locates the `ash` binary via PATH or bundled binaries.
 
 ---
 
@@ -860,6 +880,56 @@ Expressions are evaluated immediately and their results are printed. Statement f
 ### Piped input
 
 When stdin is not a terminal (e.g., `echo "print 42" | ash`), ash executes the input as a batch script with no prompt — the same behavior as before.
+
+---
+
+---
+
+## Logging System
+
+Ash writes structured logs to a file using the `log` crate facade. Logging is configured via environment variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ASH_LOG` | `warn` | Minimum log level: `error`, `warn`, `info`, `debug`, `trace` |
+| `ASH_LOG_FILE` | `ash.log` | Path to the log file (appended to on each run) |
+
+### Log levels
+
+| Level   | Purpose                         |
+| ------- | ------------------------------- |
+| `error` | Recoverable failures            |
+| `warn`  | Unexpected but non-fatal states |
+| `info`  | Major lifecycle events          |
+| `debug` | High-level flow tracing         |
+| `trace` | Detailed function-level logging |
+
+### Log output format
+
+Each line: `{timestamp} [{level}] {module} — {message}`
+
+Example:
+```
+2025-07-06T14:30:01.123456Z [info] engine — dispatching task tasks/ready/04-github.md
+2025-07-06T14:30:01.654321Z [debug] agent — connecting to opencode at localhost:8080
+2025-07-06T14:30:02.000001Z [error] agent — connection refused, retry 1/3
+```
+
+### Instrumented integration points
+
+- **Engine startup / shutdown** — `info!` at start, `info!` on exit
+- **Task file load and dispatch** — `info!` for task tree walk, `debug!` per loaded file
+- **Agent connect / send / receive** — `info!` on connect, `debug!` on request, `trace!` on stdout/stderr lines
+- **File read / write** — `debug!` on file reads in interpolation and tree walker
+- **Scope entry / exit** — `trace!` on push/pop
+
+### Usage
+
+```bash
+ASH_LOG=debug ash run tasks/
+ASH_LOG=info ash tasks/ready/
+ASH_LOG=trace ash script.ash 2>/dev/null
+```
 
 ---
 

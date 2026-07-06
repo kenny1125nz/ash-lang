@@ -1,5 +1,6 @@
 use std::fs;
 
+use log::debug;
 use regex::Regex;
 
 use crate::ast::*;
@@ -272,6 +273,7 @@ impl Evaluator {
                 )))
             }
         };
+        debug!("eval — reading file {}", path);
         let content = fs::read_to_string(&path)
             .map_err(|e| EvalError::Msg(format!("failed to read file '{}': {}", path, e)))?;
         self.resolve_interpolations(&content, &[]).map(Value::String)

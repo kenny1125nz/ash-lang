@@ -11,6 +11,7 @@ pub mod engine;
 pub mod eval;
 pub mod tree;
 pub mod repl;
+pub mod log;
 
 #[cfg(test)]
 mod thread_safe_tests {

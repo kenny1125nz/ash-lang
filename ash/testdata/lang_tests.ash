@@ -460,3 +460,51 @@ CWD_RESTORED = $(pwd)
 within end
 CWD_FINAL = $(pwd)
 print "  nested within: ${CWD_INNER} → ${CWD_INNER2} → ${CWD_RESTORED} → ${CWD_FINAL}"
+
+# ---------------------------------------------------------------------------
+# 23. Session toggle — begin inside if
+# ---------------------------------------------------------------------------
+print "session toggle inside if:"
+FLAG = true
+if FLAG {
+  session begin
+  print "  session active inside if"
+  session end
+}
+print "  session toggle inside if works"
+
+# ---------------------------------------------------------------------------
+# 24. Within toggle — begin inside for loop
+# ---------------------------------------------------------------------------
+print "within toggle inside for loop:"
+for DIR in "/tmp
+/var/tmp" {
+  within begin DIR
+  CWD_LOOP = $(pwd)
+  print "  within '${DIR}' = ${CWD_LOOP}"
+  within end
+}
+print "  within toggle inside for loop works"
+
+# ---------------------------------------------------------------------------
+# 25. Mixed within toggle + block form
+# ---------------------------------------------------------------------------
+print "within toggle + block mixed:"
+within begin "/tmp"
+print "  (toggle form)"
+within end
+within "/tmp" {
+  print "  (block form)"
+}
+print "  mixed forms work"
+
+# ---------------------------------------------------------------------------
+# 26. Session toggle + within toggle combined
+# ---------------------------------------------------------------------------
+print "session + within combined:"
+session begin
+within begin "/tmp"
+print "  session + within toggle combined"
+within end
+session end
+print "  combined toggles work"

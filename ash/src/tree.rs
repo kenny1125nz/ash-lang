@@ -1,6 +1,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use log::{debug, info, warn};
+
 use crate::engine::{self, ExecuteRequest, ExecuteResponse};
 use crate::eval::{EvalError, Evaluator};
 use crate::interpolation::Interpolation;
@@ -297,11 +299,13 @@ fn walk_dir_into(dir: &Path, tasks: &mut Vec<Task>, root: &Path) -> Result<(), S
                 walk_dir_into(&d, tasks, root)?;
             }
             Entry::File(f) => {
+                debug!("tree — reading file {}", f.display());
                 let content = match fs::read_to_string(&f) {
                     Ok(c) => c,
                     Err(_) => continue,
                 };
                 if let Some(task) = read_task(&f, &content) {
+                    debug!("tree — loaded task {}", f.display());
                     tasks.push(task);
                 } else {
                     let rel = f
@@ -320,6 +324,8 @@ fn walk_dir_into(dir: &Path, tasks: &mut Vec<Task>, root: &Path) -> Result<(), S
 }
 
 pub fn run_tree(config: WalkConfig, eval: &mut Evaluator) -> i32 {
+    info!("engine — walking task tree at {}", config.root.display());
+
     let tasks = match walk_dir(&config.root) {
         Ok(t) => t,
         Err(e) => {
@@ -330,9 +336,11 @@ pub fn run_tree(config: WalkConfig, eval: &mut Evaluator) -> i32 {
     let total = tasks.len();
 
     if total == 0 {
-        eprintln!("No tasks found in {}", config.root.display());
+        warn!("No tasks found in {}", config.root.display());
         return 0;
     }
+
+    info!("engine — dispatching {} tasks", total);
 
     if config.dry_run {
         for (i, task) in tasks.iter().enumerate() {
@@ -390,7 +398,8 @@ pub fn run_tree(config: WalkConfig, eval: &mut Evaluator) -> i32 {
             .strip_prefix(&config.root)
             .unwrap_or(&task.path)
             .display();
-        eprintln!("[{}/{}] {}", i + 1, total, rel_path);
+        info!("engine — dispatching task {}", rel_path);
+        debug!("task {}/{}: {} (kind={:?})", i + 1, total, rel_path, task.kind);
 
         match task.kind {
             TaskKind::Markdown => {

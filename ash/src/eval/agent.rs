@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use log::{debug, info};
+
 use crate::ast::*;
 use crate::value::Value;
 
@@ -50,6 +52,9 @@ impl Evaluator {
             .agent
             .as_deref()
             .unwrap_or(&self.default_agent);
+
+        info!("agent — calling {} with agent {}", agent_name, agent_name);
+        debug!("agent — prompt: {} chars", prompt_str.len());
 
         let eng = crate::engine::get(agent_name);
         let result = if let Some(eng) = eng {

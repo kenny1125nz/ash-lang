@@ -7,6 +7,8 @@ use ash::eval::{EvalError, Evaluator};
 use ash::parser::parse_str;
 use ash::tree::{self, WalkConfig};
 
+use log::info;
+
 fn collect_agent_names<'a>(nodes: &'a [Node], names: &mut HashSet<&'a str>) {
     for node in nodes {
         match node {
@@ -198,8 +200,54 @@ fn parse_agent_spec(spec: Option<&str>) -> (String, String) {
     (agent, model)
 }
 
+fn cmd_discover(args: &[String]) -> i32 {
+    let mut write = false;
+    let mut force = false;
+    for arg in args {
+        match arg.as_str() {
+            "--write" => write = true,
+            "--force" => force = true,
+            _ => {}
+        }
+    }
+
+    let result = engine::discover();
+
+    if write {
+        match engine::write_config("ash-project.yaml", &result, force) {
+            Ok(()) => println!("Generated ash-project.yaml"),
+            Err(e) => {
+                eprintln!("error: {}", e);
+                return 1;
+            }
+        }
+    }
+
+    engine::print_discovery(&result);
+    0
+}
+
+fn ensure_agents_registered() {
+    if std::path::Path::new("ash-project.yaml").exists() {
+        engine::register_defaults();
+    } else {
+        let result = engine::discover_and_register();
+        let summary = engine::discovery_summary(&result);
+        eprintln!("{}", summary);
+    }
+}
+
 fn run() -> i32 {
+    let _ = ash::log::init();
+    info!("engine — starting up");
+
     let args: Vec<String> = std::env::args().collect();
+
+    if args.len() > 1 && args[1] == "discover" {
+        info!("engine — discover command");
+        return cmd_discover(&args[2..]);
+    }
+
     let mut check_only = false;
     let mut dry_run = false;
     let mut continue_on_error = false;
@@ -228,7 +276,7 @@ fn run() -> i32 {
     if !positional.is_empty() {
         let path = std::path::Path::new(&positional[0]);
         if path.is_dir() {
-            engine::register_defaults();
+            ensure_agents_registered();
             let mut eval = Evaluator::new();
             return tree::run_tree(WalkConfig {
                 root: path.to_path_buf(),
@@ -250,7 +298,7 @@ fn run() -> i32 {
         }
     } else {
         if ash::repl::is_tty() {
-            engine::register_defaults();
+            ensure_agents_registered();
             let mut eval = Evaluator::new();
             eval.set_default_agent(&default_agent);
             if !default_model.is_empty() {
@@ -286,7 +334,7 @@ fn run() -> i32 {
         return 0;
     }
 
-    engine::register_defaults();
+    ensure_agents_registered();
 
     let mut eval = Evaluator::new();
     if let Some(ref shebang) = script.shebang {

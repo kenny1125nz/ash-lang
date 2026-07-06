@@ -138,7 +138,7 @@
       "patterns": [
         {
           "name": "keyword.control.ash",
-          "match": "\\b(if|else|for|while|fn|return|break|continue|do|try|wait|select)\\b"
+          "match": "\\b(if|else|for|in|while|fn|return|break|continue|do|try|wait|within|session|begin|end)\\b"
         },
         {
           "name": "keyword.operator.ash",

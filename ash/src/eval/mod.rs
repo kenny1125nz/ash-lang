@@ -9,6 +9,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+use log::{debug, info, trace};
+
 use crate::ast::*;
 use crate::compact::Config as CompactConfig;
 use crate::executor::Executor;
@@ -115,6 +117,7 @@ impl Evaluator {
     // --- Public API ---
 
     pub fn eval_script(&mut self, script: &Script) -> Result<(), EvalError> {
+        info!("engine — evaluating script ({} statements)", script.body.len());
         self.eval_statements(&script.body)
     }
 
@@ -331,11 +334,13 @@ impl Evaluator {
     // --- Scope helpers ---
 
     pub fn push_scope(&mut self) {
+        trace!("scope — enter");
         let new_scope = Scope::with_parent(self.current_scope.clone());
         self.current_scope = new_scope;
     }
 
     pub fn pop_scope(&mut self) {
+        trace!("scope — exit");
         let parent = self.current_scope.lock().unwrap().parent.clone();
         if let Some(p) = parent {
             self.current_scope = p;
@@ -371,6 +376,7 @@ impl Evaluator {
             other => format!("{}", other),
         };
 
+        debug!("eval — include file {}", path);
         let src = fs::read_to_string(&path)
             .map_err(|e| EvalError::Msg(format!("include: failed to read '{}': {}", path, e)))?;
 

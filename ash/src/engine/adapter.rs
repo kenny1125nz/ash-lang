@@ -3,6 +3,8 @@ use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+use log::{debug, info, trace};
+
 use super::driver::LocalCliDriver;
 use super::types::{ExecuteRequest, ExecuteResponse};
 
@@ -33,14 +35,8 @@ impl Adapter for LocalCliAdapter {
     fn execute(&self, req: &ExecuteRequest) -> ExecuteResponse {
         let spec = self.driver.build_command(req);
 
-        {
-            let mut f = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open("/tmp/ash-commands.log")
-                .unwrap();
-            writeln!(f, "[ash:{}] {} {}", self.name, spec.cmd, spec.args.join(" ")).unwrap();
-        }
+        info!("agent — connecting to {} at {}", self.name, spec.cmd);
+        debug!("agent — request: {} {}", spec.cmd, spec.args.join(" "));
 
         let mut child = match Command::new(&spec.cmd)
             .args(&spec.args)
@@ -79,6 +75,7 @@ impl Adapter for LocalCliAdapter {
                 for line in reader.lines() {
                     match line {
                         Ok(l) => {
+                            trace!("agent stdout: {}", l);
                             let mut b = buf.lock().unwrap();
                             b.push_str(&l);
                             b.push('\n');
@@ -101,6 +98,7 @@ impl Adapter for LocalCliAdapter {
                 for line in reader.lines() {
                     match line {
                         Ok(l) => {
+                            trace!("agent stderr: {}", l);
                             let mut b = buf.lock().unwrap();
                             b.push_str(&l);
                             b.push('\n');
@@ -120,6 +118,8 @@ impl Adapter for LocalCliAdapter {
             Ok(status) => status.code().unwrap_or(-1),
             Err(_) => -1,
         };
+
+        debug!("agent — {} exited with code {}", self.name, exit_code);
 
         if let Some(h) = stdout_handle {
             let _ = h.join();

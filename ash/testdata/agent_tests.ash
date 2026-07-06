@@ -543,3 +543,62 @@ try {
   print "  block inside toggle correctly rejected"
   session end
 } upto 1
+
+# ---------------------------------------------------------------------------
+# 56. Within toggle — do inside with in clause override
+# ---------------------------------------------------------------------------
+print "=== 56. Within toggle + in clause ==="
+within begin "/tmp"
+do "in clause override" in "/"
+print "  within toggle + in: ${stdout}"
+within end
+print "  within toggle + in works"
+
+# ---------------------------------------------------------------------------
+# 57. Session toggle — multiple begin/end pairs independent
+# ---------------------------------------------------------------------------
+print "=== 57. Session toggle — independent pairs ==="
+session begin
+do "first pair call"
+print "  (1) ${stdout}"
+session end
+print "  (gap)"
+session begin
+do "second pair call"
+print "  (2) ${stdout}"
+session end
+print "  independent session toggles work"
+
+# ---------------------------------------------------------------------------
+# 58. Mixed within toggle and block
+# ---------------------------------------------------------------------------
+print "=== 58. Mixed within toggle + block ==="
+within begin "/tmp"
+do "inside toggle"
+print "  toggle: ${stdout}"
+within end
+within "/tmp" {
+  do "inside block"
+  print "  block: ${stdout}"
+}
+print "  mixed within works"
+
+# ---------------------------------------------------------------------------
+# 59. Session toggle — do with using clause
+# ---------------------------------------------------------------------------
+print "=== 59. Session toggle + using ==="
+session begin
+do "toggle with model" using "sonnet"
+print "  stdout: ${stdout}"
+session end
+print "  session + using works"
+
+# ---------------------------------------------------------------------------
+# 60. Session toggle — do with compact clause
+# ---------------------------------------------------------------------------
+print "=== 60. Session toggle + compact ==="
+session begin
+do "toggle with compact" compact "truncate 100"
+print "  stdout: ${stdout}"
+session end
+print "  session + compact works"

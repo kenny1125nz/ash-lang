@@ -1,17 +1,20 @@
 {
-  "name": "ash-language",
+  "name": "vscode-ash",
   "displayName": "Ash Language Support",
-  "description": "Syntax highlighting and language support for Ash (.ash) agent shell scripts",
+  "description": "Syntax highlighting, run, and check commands for Ash (.ash) agent shell scripts",
   "version": "0.1.0",
-  "publisher": "ash",
+  "publisher": "ash-lang",
   "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": [
-    "Programming Languages",
-    "Formatters"
+    "Programming Languages"
   ],
+  "activationEvents": [
+    "onLanguage:ash"
+  ],
+  "main": "./out/extension.js",
   "contributes": {
     "languages": [
       {
@@ -36,6 +39,50 @@
         "scopeName": "source.ash",
         "path": "./syntaxes/ash.tmLanguage.json"
       }
-    ]
+    ],
+    "commands": [
+      {
+        "command": "ash.runScript",
+        "title": "Ash: Run Script"
+      },
+      {
+        "command": "ash.checkScript",
+        "title": "Ash: Check Script"
+      },
+      {
+        "command": "ash.stopScript",
+        "title": "Ash: Stop Script"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "ash.runScript",
+          "when": "resourceLangId == ash",
+          "group": "ash"
+        },
+        {
+          "command": "ash.checkScript",
+          "when": "resourceLangId == ash",
+          "group": "ash"
+        },
+        {
+          "command": "ash.stopScript",
+          "when": "resourceLangId == ash",
+          "group": "ash"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.0.0"
   }
 }
