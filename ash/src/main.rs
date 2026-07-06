@@ -105,14 +105,19 @@ fn validate_agents(script: &Script) -> Result<(), String> {
         used_agents.insert(&shebang.engine);
     }
 
+    let builtin: HashSet<&str> = ["echo", "opencode", "claude-code", "aider"]
+        .iter()
+        .copied()
+        .collect();
+
+    used_agents.retain(|name| !builtin.contains(name));
+
     if used_agents.is_empty() {
         return Ok(());
     }
 
     let config_path = std::path::Path::new("ash-project.yaml");
-    let config_exists = config_path.exists();
-
-    if !config_exists {
+    if !config_path.exists() {
         eprintln!(
             "warning: script references agent(s) ({}) but no ash-project.yaml found — \
              agent names will be resolved against the default registry",

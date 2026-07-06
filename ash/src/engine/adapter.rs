@@ -33,6 +33,15 @@ impl Adapter for LocalCliAdapter {
     fn execute(&self, req: &ExecuteRequest) -> ExecuteResponse {
         let spec = self.driver.build_command(req);
 
+        {
+            let mut f = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open("/tmp/ash-commands.log")
+                .unwrap();
+            writeln!(f, "[ash:{}] {} {}", self.name, spec.cmd, spec.args.join(" ")).unwrap();
+        }
+
         let mut child = match Command::new(&spec.cmd)
             .args(&spec.args)
             .stdin(if spec.stdin_prompt {

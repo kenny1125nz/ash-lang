@@ -20,7 +20,7 @@ impl LocalCliDriver for OpenCodeDriver {
     }
 
     fn build_command(&self, req: &ExecuteRequest) -> CommandSpec {
-        let mut args = vec!["run".to_string(), "--continue".to_string()];
+        let mut args = vec!["run".to_string()];
         if req.session {
             args.push("--continue".to_string());
         }

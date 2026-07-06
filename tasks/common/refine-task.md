@@ -1,6 +1,6 @@
 # Task Definition Principles
 
-Guidelines for writing task definition files used by the directory-based orchestration engine (`ash <directory>`).
+refin/update task definition files of ${file} to be used by the directory-based orchestration engine (`ash <directory>`).
 
 ## File Structure
 
