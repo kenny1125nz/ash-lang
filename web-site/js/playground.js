@@ -82,6 +82,7 @@ function highlightAsh(code) {
   }).join('');
 }
 
+// --- Shared worker state ---
 let evalWorker = null;
 let stateView = null;
 let resView = null;
@@ -111,6 +112,89 @@ async function processAgentQueue(queue) {
   statusEl.textContent = 'done';
 }
 
+// --- REPL state ---
+let replReady = false;
+let replBuffer = [];
+let replHistory = [];
+const replPromptEl = document.getElementById('repl-prompt');
+const replInputEl = document.getElementById('repl-input');
+const replOutputEl = document.getElementById('repl-output');
+const scriptTabEl = document.getElementById('script-tab');
+const replTabEl = document.getElementById('repl-tab');
+const scriptPanelEl = document.getElementById('script-panel');
+const replPanelEl = document.getElementById('repl-panel');
+
+function braceDepth(line) {
+  let open = 0;
+  for (const ch of line) {
+    if (ch === '{') open++;
+    if (ch === '}') open--;
+  }
+  return open;
+}
+
+function switchTab(mode) {
+  if (mode === 'repl') {
+    scriptTabEl.classList.remove('active');
+    replTabEl.classList.add('active');
+    scriptPanelEl.style.display = 'none';
+    replPanelEl.style.display = 'flex';
+    replInputEl.focus();
+    if (workerReady && !replReady) {
+      replInit();
+    }
+  } else {
+    replTabEl.classList.remove('active');
+    scriptTabEl.classList.add('active');
+    replPanelEl.style.display = 'none';
+    scriptPanelEl.style.display = '';
+    editorEl.focus();
+  }
+}
+
+function replInit() {
+  evalWorker.postMessage({ type: 'repl_init' });
+}
+
+function replEvalLine(line) {
+  replOutputEl.innerHTML += '<span class="repl-prompt-line">&gt; ' + escapeHtml(line) + '</span><br>';
+  replHistory.push(line);
+  evalWorker.postMessage({ type: 'repl_eval', line });
+}
+
+function replSubmit() {
+  const line = replInputEl.value;
+  replInputEl.value = '';
+
+  if (replBuffer.length === 0 && line.trim().startsWith('.') && line.trim().split(' ')[0] === '.help') {
+    replOutputEl.innerHTML += '<span class="repl-prompt-line">&gt; .help</span><br>';
+    replOutputEl.innerHTML += '.help &mdash; Show this help<br>';
+    replOutputEl.innerHTML += '.clear &mdash; Clear all variables<br>';
+    replOutputEl.innerHTML += '.vars &mdash; List all variables<br>';
+    replOutputEl.innerHTML += '.exit &mdash; Exit REPL<br>';
+    replOutputEl.scrollTop = replOutputEl.scrollHeight;
+    return;
+  }
+
+  replBuffer.push(line);
+  const depth = replBuffer.reduce((sum, l) => sum + braceDepth(l), 0);
+
+  if (depth > 0) {
+    replPromptEl.textContent = '... ';
+    return;
+  }
+
+  const full = replBuffer.join('\n');
+  replBuffer = [];
+  replPromptEl.textContent = '> ';
+  replEvalLine(full);
+}
+
+function replScrollBottom() {
+  replOutputEl.scrollTop = replOutputEl.scrollHeight;
+}
+
+// --- Worker message handler ---
 function setupWorkerHandlers() {
   evalWorker.addEventListener('message', async (e) => {
     const msg = e.data;
@@ -125,6 +209,19 @@ function setupWorkerHandlers() {
         resData = new DataView(msg.resBuf);
       }
       workerReady = true;
+      return;
+    }
+
+    if (msg.type === 'repl_ready') {
+      replReady = true;
+      return;
+    }
+
+    if (msg.type === 'repl_result') {
+      if (msg.output) {
+        replOutputEl.innerHTML += escapeHtml(msg.output).replace(/\n/g, '<br>') + '<br>';
+        replScrollBottom();
+      }
       return;
     }
 
@@ -169,6 +266,7 @@ function setupWorkerHandlers() {
   });
 }
 
+// --- WASM init ---
 async function initWasm() {
   try {
     evalWorker = new Worker('./eval-worker.js', { type: 'module' });
@@ -181,6 +279,7 @@ async function initWasm() {
   }
 }
 
+// --- Script runner ---
 window.runScript = async function () {
   const code = editorEl.value.trim();
   if (!code) { showToast('Enter a script first', true); return; }
@@ -203,6 +302,7 @@ window.clearOutput = function () {
   statusEl.textContent = 'ready';
 };
 
+// --- Editor sync ---
 function syncEditor() {
   const highlight = document.getElementById('editor-highlight');
   if (highlight) {
@@ -244,6 +344,17 @@ function setupEditor() {
   syncEditor();
 }
 
+// --- REPL input key binding ---
+function setupReplInput() {
+  if (!replInputEl) return;
+  replInputEl.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      replSubmit();
+    }
+  });
+}
+
 function highlightExamples() {
   document.querySelectorAll('.example-code').forEach(el => {
     const code = el.textContent || '';
@@ -260,5 +371,6 @@ function showToast(msg, isError) {
 }
 
 setupEditor();
+setupReplInput();
 highlightExamples();
 initWasm();

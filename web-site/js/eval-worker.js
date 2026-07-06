@@ -75,13 +75,21 @@ self.onmessage = function (e) {
       agentQueue: useBlocking ? null : agentQueue,
     });
   }
+  if (e.data.type === 'repl_init' && ashWasm) {
+    ashWasm.repl_init();
+    self.postMessage({ type: 'repl_ready' });
+  }
+  if (e.data.type === 'repl_eval' && ashWasm) {
+    const result = ashWasm.repl_eval(e.data.line);
+    self.postMessage({ type: 'repl_result', output: result });
+  }
 };
 
 async function init() {
   try {
-    const mod = await import('./ash.js');
+    const mod = await import('../wasm/ash.js');
     await mod.default();
-    ashWasm = { run: mod.run, parse: mod.parse };
+    ashWasm = { run: mod.run, parse: mod.parse, repl_init: mod.repl_init, repl_eval: mod.repl_eval };
     mod.register_agent_callback(agentCallback);
     if (mod.set_output_callback) {
       mod.set_output_callback(outputCallback);

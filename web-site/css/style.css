@@ -210,3 +210,13 @@ td:first-child { color: var(--text); font-family: var(--font-mono); font-size: 1
 }
 .toast.show { transform: translateY(0); opacity: 1; }
 .toast.error { background: var(--accent4); }
+
+/* Playground tabs */
+.tab-btn.active {
+  color: var(--accent) !important;
+  border-bottom-color: var(--accent) !important;
+}
+.tab-btn:hover { color: var(--text) !important; }
+
+/* REPL output */
+.repl-prompt-line { color: var(--accent2); font-weight: 600; }

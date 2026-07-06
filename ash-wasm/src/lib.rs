@@ -5,6 +5,8 @@ use wasm_bindgen::prelude::*;
 
 use ash::engine::{BrowserAdapter, ExecuteRequest, ExecuteResponse};
 use ash::eval::{EvalError, Evaluator, SharedWriter};
+use ash::scope::Scope;
+use ash::value::Value;
 
 fn agent_callback() -> &'static Mutex<Option<js_sys::Function>> {
     static CB: OnceLock<Mutex<Option<js_sys::Function>>> = OnceLock::new();
@@ -132,4 +134,128 @@ pub fn run(source: &str) -> String {
     }
     let bytes = out_buf.lock().unwrap().clone();
     String::from_utf8_lossy(&bytes).to_string()
+}
+
+fn repl_eval_state() -> &'static Mutex<Option<Evaluator>> {
+    static EVAL: OnceLock<Mutex<Option<Evaluator>>> = OnceLock::new();
+    EVAL.get_or_init(|| Mutex::new(None))
+}
+
+#[wasm_bindgen]
+pub fn repl_init() {
+    ash::engine::register_defaults();
+
+    let browser_adapter = Arc::new(BrowserAdapter::new(
+        "pageagent",
+        Arc::new(move |req: &ExecuteRequest| -> ExecuteResponse {
+            call_js_agent(&req.prompt, &req.model)
+        }),
+    ));
+    ash::engine::register("pageagent", browser_adapter.clone());
+    ash::engine::register("browser", browser_adapter.clone());
+    ash::engine::register("js-echo", browser_adapter);
+
+    let mut eval = Evaluator::new();
+    let out_buf: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+    eval.stdout = captured_writer(out_buf);
+    *repl_eval_state().lock().unwrap() = Some(eval);
+}
+
+#[wasm_bindgen]
+pub fn repl_eval(line: &str) -> String {
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    let mut guard = repl_eval_state().lock().unwrap();
+    let eval = match guard.as_mut() {
+        Some(e) => e,
+        None => return "Error: REPL not initialized. Call repl_init() first.".to_string(),
+    };
+
+    if trimmed.starts_with('.') {
+        return handle_repl_dot_cmd(trimmed, eval);
+    }
+
+    let script = match ash::parser::parse_str(line) {
+        Ok(s) => s,
+        Err(e) => return format!("error: {}", e),
+    };
+
+    let out_buf: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+    let saved = std::mem::replace(&mut eval.stdout, captured_writer(out_buf.clone()));
+
+    for stmt in &script.body {
+        match eval.eval_statement(stmt) {
+            Ok(val) => {
+                if is_repl_expr_node(stmt) && val != Value::Nil {
+                    let _ = write!(out_buf.lock().unwrap(), "{}", val);
+                }
+            }
+            Err(EvalError::Exit(_)) => {
+                let _ = write!(out_buf.lock().unwrap(), "\n[exit REPL]");
+            }
+            Err(EvalError::Msg(e)) => {
+                let _ = write!(out_buf.lock().unwrap(), "error: {}", e);
+            }
+        }
+    }
+
+    eval.stdout = saved;
+    let bytes = out_buf.lock().unwrap().clone();
+    String::from_utf8_lossy(&bytes).to_string()
+}
+
+fn handle_repl_dot_cmd(cmd: &str, eval: &mut Evaluator) -> String {
+    let parts: Vec<&str> = cmd.splitn(2, ' ').collect();
+    match parts[0] {
+        ".clear" => {
+            eval.current_scope = Scope::new();
+            eval.global_scope = eval.current_scope.clone();
+            eval.session_depth = 0;
+            "Scope cleared.".to_string()
+        }
+        ".vars" => {
+            let vars = eval.current_scope.lock().unwrap().get_all();
+            if vars.is_empty() {
+                "(no variables)".to_string()
+            } else {
+                let mut keys: Vec<&String> = vars.keys().collect();
+                keys.sort();
+                let mut out = String::new();
+                for key in keys {
+                    let val = &vars[key];
+                    match val {
+                        Value::String(s) => { out.push_str(&format!("{} = \"{}\"\n", key, s)); }
+                        _ => { out.push_str(&format!("{} = {}\n", key, val)); }
+                    }
+                }
+                out
+            }
+        }
+        ".exit" => "\n[exit REPL]".to_string(),
+        _ => format!("unknown command: {}. Type .help for available commands.", parts[0]),
+    }
+}
+
+fn is_repl_expr_node(node: &ash::ast::Node) -> bool {
+    use ash::ast::Node;
+    matches!(
+        node,
+        Node::VarAssign(_)
+            | Node::BinaryExpr(_)
+            | Node::UnaryExpr(_)
+            | Node::VarRef(_)
+            | Node::StringLiteral(_)
+            | Node::IntLiteral(_)
+            | Node::FloatLiteral(_)
+            | Node::BoolLiteral(_)
+            | Node::CommandSubst(_)
+            | Node::FnCall(_)
+            | Node::ArrayLiteral(_)
+            | Node::IndexExpr(_)
+            | Node::GroupExpr(_)
+            | Node::FilePath(_)
+    )
 }
