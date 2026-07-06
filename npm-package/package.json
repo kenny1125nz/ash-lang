@@ -1,6 +1,6 @@
 {
   "name": "@ash-lang/cli",
-  "version": "0.1.2",
+  "version": "0.1.4",
   "description": "Ash CLI — multi-agent orchestration",
   "bin": {
     "ash": "./ash"
