@@ -99,7 +99,35 @@ fn collect_agent_names<'a>(nodes: &'a [Node], names: &mut HashSet<&'a str>) {
     }
 }
 
-fn validate_agents(script: &Script) -> Result<(), String> {
+const DEFAULT_CONFIG_FILENAME: &str = "ash.yaml";
+
+fn global_config_dir() -> std::path::PathBuf {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".to_string());
+    std::path::PathBuf::from(home).join(".ash")
+}
+
+fn global_config_path() -> std::path::PathBuf {
+    global_config_dir().join(DEFAULT_CONFIG_FILENAME)
+}
+
+fn resolve_config_path(custom: Option<&str>) -> Option<std::path::PathBuf> {
+    if let Some(path) = custom {
+        return Some(std::path::PathBuf::from(path));
+    }
+    let cwd = std::path::Path::new(DEFAULT_CONFIG_FILENAME);
+    if cwd.exists() {
+        return Some(cwd.to_path_buf());
+    }
+    let global = global_config_path();
+    if global.exists() {
+        return Some(global);
+    }
+    None
+}
+
+fn validate_agents(script: &Script, config_path: Option<&str>) -> Result<(), String> {
     let mut used_agents = HashSet::new();
     collect_agent_names(&script.body, &mut used_agents);
 
@@ -118,14 +146,15 @@ fn validate_agents(script: &Script) -> Result<(), String> {
         return Ok(());
     }
 
-    let config_path = resolve_config_path();
-    let config_path_str = match config_path {
+    let resolved = resolve_config_path(config_path);
+    let config_path_str = match resolved {
         Some(ref p) => p.to_str().unwrap().to_string(),
         None => {
             eprintln!(
-                "warning: script references agent(s) ({}) but no ash.yaml found — \
+                "warning: script references agent(s) ({}) but no {} found — \
                  agent names will be resolved against the default registry",
-                used_agents.iter().map(|s| format!("'{}'", s)).collect::<Vec<_>>().join(", ")
+                used_agents.iter().map(|s| format!("'{}'", s)).collect::<Vec<_>>().join(", "),
+                DEFAULT_CONFIG_FILENAME,
             );
             return Ok(());
         }
@@ -175,29 +204,6 @@ fn parse_agent_spec(spec: Option<&str>) -> (String, String) {
     (agent, model)
 }
 
-fn global_config_dir() -> std::path::PathBuf {
-    let home = std::env::var("HOME")
-        .or_else(|_| std::env::var("USERPROFILE"))
-        .unwrap_or_else(|_| ".".to_string());
-    std::path::PathBuf::from(home).join(".ash")
-}
-
-fn global_config_path() -> std::path::PathBuf {
-    global_config_dir().join("ash.yaml")
-}
-
-fn resolve_config_path() -> Option<std::path::PathBuf> {
-    let cwd = std::path::Path::new("ash.yaml");
-    if cwd.exists() {
-        return Some(cwd.to_path_buf());
-    }
-    let global = global_config_path();
-    if global.exists() {
-        return Some(global);
-    }
-    None
-}
-
 fn cmd_discover(args: &[String]) -> i32 {
     let mut write = false;
     let mut force = false;
@@ -212,8 +218,8 @@ fn cmd_discover(args: &[String]) -> i32 {
     let result = engine::discover();
 
     if write {
-        match engine::write_config("ash.yaml", &result, force) {
-            Ok(()) => println!("Generated ash.yaml"),
+        match engine::write_config(DEFAULT_CONFIG_FILENAME, &result, force) {
+            Ok(()) => println!("Generated {}", DEFAULT_CONFIG_FILENAME),
             Err(e) => {
                 eprintln!("error: {}", e);
                 return 1;
@@ -225,19 +231,31 @@ fn cmd_discover(args: &[String]) -> i32 {
     0
 }
 
-fn ensure_agents_registered() {
+fn ensure_agents_registered(config_path: Option<&str>) {
     engine::register_defaults();
 
-    if let Some(config_path) = resolve_config_path() {
-        match engine::read_config(config_path.to_str().unwrap()) {
-            Ok(agents) => {
-                for config in agents {
-                    let adapter = engine::from_config(&config);
-                    engine::register(&config.name, adapter);
+    let resolved = resolve_config_path(config_path);
+
+    if let Some(ref path) = resolved {
+        if path.exists() {
+            match engine::read_config(path.to_str().unwrap()) {
+                Ok(agents) => {
+                    for config in agents {
+                        let adapter = engine::from_config(&config);
+                        engine::register(&config.name, adapter);
+                    }
+                    return;
                 }
-                return;
+                Err(e) => eprintln!("warning: failed to read config: {}", e),
             }
-            Err(e) => eprintln!("warning: failed to read config: {}", e),
+        }
+
+        if config_path.is_some() {
+            eprintln!(
+                "error: config file not found: {}",
+                path.display()
+            );
+            return;
         }
     }
 
@@ -250,7 +268,7 @@ fn ensure_agents_registered() {
         eprintln!("warning: failed to create {}: {}", dir.display(), e);
         return;
     }
-    let path = dir.join("ash.yaml");
+    let path = dir.join(DEFAULT_CONFIG_FILENAME);
     if let Err(e) = engine::write_config(path.to_str().unwrap(), &result, false) {
         eprintln!("warning: failed to save config: {}", e);
     }
@@ -271,6 +289,7 @@ fn run() -> i32 {
     let mut dry_run = false;
     let mut continue_on_error = false;
     let mut agent_spec: Option<String> = None;
+    let mut config_override: Option<String> = None;
     let mut positional: Vec<String> = Vec::new();
 
     let mut i = 1;
@@ -285,6 +304,12 @@ fn run() -> i32 {
                     agent_spec = Some(args[i].clone());
                 }
             }
+            "--config" => {
+                if i + 1 < args.len() {
+                    i += 1;
+                    config_override = Some(args[i].clone());
+                }
+            }
             _ => positional.push(args[i].clone()),
         }
         i += 1;
@@ -295,7 +320,7 @@ fn run() -> i32 {
     if !positional.is_empty() {
         let path = std::path::Path::new(&positional[0]);
         if path.is_dir() {
-            ensure_agents_registered();
+            ensure_agents_registered(config_override.as_deref());
             let mut eval = Evaluator::new();
             return tree::run_tree(WalkConfig {
                 root: path.to_path_buf(),
@@ -317,7 +342,7 @@ fn run() -> i32 {
         }
     } else {
         if ash::repl::is_tty() {
-            ensure_agents_registered();
+            ensure_agents_registered(config_override.as_deref());
             let mut eval = Evaluator::new();
             eval.set_default_agent(&default_agent);
             if !default_model.is_empty() {
@@ -343,7 +368,7 @@ fn run() -> i32 {
         }
     };
 
-    if let Err(e) = validate_agents(&script) {
+    if let Err(e) = validate_agents(&script, config_override.as_deref()) {
         eprintln!("error: {}", e);
         return 1;
     }
@@ -353,7 +378,7 @@ fn run() -> i32 {
         return 0;
     }
 
-    ensure_agents_registered();
+    ensure_agents_registered(config_override.as_deref());
 
     let mut eval = Evaluator::new();
     if let Some(ref shebang) = script.shebang {
