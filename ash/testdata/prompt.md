@@ -1,0 +1,1 @@
+hello ${VAR1} and ${VAR2}
