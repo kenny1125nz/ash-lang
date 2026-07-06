@@ -1,0 +1,3 @@
+#!/bin/sh
+echo "ash: binary not yet downloaded. Re-run: npm i -g @ash-lang/cli" >&2
+exit 1

@@ -1,6 +1,6 @@
 {
   "name": "@ash-lang/cli",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Ash CLI — multi-agent orchestration",
   "bin": {
     "ash": "./ash"
@@ -9,6 +9,7 @@
     "postinstall": "node postinstall.js"
   },
   "files": [
+    "ash",
     "ash.js",
     "postinstall.js",
     "README.md"
