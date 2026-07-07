@@ -1,20 +1,120 @@
 # Ash
 
-A CLI agent orchestration tool and scripting language for composing multi-agent workflows.
+**Orchestrate AI agents from a directory of markdown files.**
 
-Ash lets you write scripts that coordinate AI agents — send prompts, chain their outputs, run them in parallel, and handle errors — all from a single `.ash` file.
+Point Ash at a directory — it walks the tree in sorted order and sends
+every `.md` file to your configured AI agent. One task per file.
+No scripting required.
+
+```
+tasks/
+├── 1-plan/
+│   ├── 01-requirements.md
+│   └── 02-architecture.md
+├── 2-implement/
+│   ├── 01-auth.md
+│   ├── 02-api.md
+│   └── 03-tests.md
+└── 3-review/
+    └── 01-code-review.md
+
+→ ash tasks/
+```
 
 ## Quick Start
 
 ### Install
 
 ```bash
-cargo install ash
+npm install -g @ash-lang/cli
 ```
 
 Or download a prebuilt binary from [GitHub Releases](https://github.com/kenny1125nz/ash-lang/releases).
 
-### Your first script
+### Configure your agent
+
+Create `ash.yaml` in your project root:
+
+```yaml
+default_agent: opencode:deepseek-v3
+```
+
+Or set it per-run:
+
+```bash
+ash --agent opencode:deepseek-v3 tasks/
+```
+
+### Run your first project
+
+```
+my-project/
+├── ash.yaml
+└── tasks/
+    ├── 1-init/
+    │   └── 01-setup.md
+    └── 2-feature/
+        └── 01-add-login.md
+```
+
+```bash
+ash my-project/tasks/
+```
+
+Ash prints each task and its result as the agent completes it. Tasks
+that return a non-zero exit code are marked as failures.
+
+### Skip failures, keep going
+
+```bash
+ash --continue-on-error tasks/
+```
+
+### Validate without running
+
+```bash
+ash --check tasks/
+```
+
+### See what would run
+
+```bash
+ash --dry-run tasks/
+```
+
+## Writing Tasks
+
+Each `.md` file is a standalone prompt sent to the agent. The filename
+sets the order — Ash sorts alphanumerically. Subdirectories group
+related tasks.
+
+**tasks/1-plan/01-requirements.md:**
+
+```markdown
+Write a requirements document for a login system that supports:
+
+- Email/password authentication
+- OAuth with Google and GitHub
+- Session management with JWT
+- Rate limiting on failed attempts
+```
+
+**tasks/2-implement/01-auth.md:**
+
+```markdown
+Implement the login API endpoint. Cover:
+
+- POST /auth/login — validates email/password, returns JWT
+- POST /auth/register — creates user, sends verification email
+- POST /auth/refresh — refreshes expired tokens
+
+Use the requirements from tasks/1-plan/01-requirements.md.
+```
+
+## Scripting (Advanced)
+
+When you need more than one-shot prompts — chaining, conditionals,
+parallelism — write an `.ash` script:
 
 ```bash
 #!/usr/bin/env ash
@@ -42,37 +142,6 @@ ash
 | `claude-code` | Anthropic Claude Code |
 | `aider` | Aider AI pair programming |
 
-## Usage
-
-```
-ash [options] [script.ash]
-ash [options] [directory/]
-
-Options:
-  --check, -c            Validate script without executing
-  --dry-run              Walk the directory tree without executing
-  --agent <name[:model]> Set default agent and optional model
-  --continue-on-error, -k  Continue past failing tasks
-```
-
-## Directory-Based Orchestration
-
-Organize tasks as a directory tree. Ash walks the tree in order and sends each file to the configured agent:
-
-```
-tasks/
-├── 1-setup/
-│   ├── 01-init.md
-│   └── 02-deps.md
-└── 2-implement/
-    ├── 01-core.md
-    └── 02-tests.md
-```
-
-```bash
-ash tasks/
-```
-
 ## Building from Source
 
 ```bash
@@ -85,4 +154,4 @@ Requirements: Rust 1.70+
 
 ## License
 
-MIT
+AGPLv3
