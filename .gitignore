@@ -4,3 +4,5 @@ node_modules/
 ash-wasm/pkg/
 web-site/wasm/
 .wrangler/
+.aider*
+*.vsix

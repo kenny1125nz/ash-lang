@@ -29,8 +29,12 @@ do "Fix the login bug in src/auth/login.ts" with opencode
 ash script.ash                     # run a script
 ash tasks/                         # run directory mode
 ash --check script.ash             # validate syntax only
+ash -c script.ash                  # shorthand for --check
 ash --agent opencode:sonnet        # default agent and model
 ash tasks/ --dry-run               # preview without executing
+ash --config path/to/ash.yaml      # custom config file path
+ash --continue-on-error            # keep going after task failure
+ash -k                             # shorthand for --continue-on-error
 ```
 
 ---
@@ -74,6 +78,15 @@ The prompt content for the agent goes here...
 
 Ash scripts (`.ash`) use a shebang line: `#!opencode:1.0`. Run `ash tasks/` to execute all tasks in sequence.
 
+| Frontmatter key | Values         | Default | Description                              |
+|-----------------|----------------|---------|------------------------------------------|
+| `agent`         | agent name     | —       | Override agent for this task             |
+| `model`         | model name     | —       | Override model for this task             |
+| `on_fail`       | `stop`, `continue` | `stop` | Behavior when the task fails           |
+| `compact`       | directive      | —       | Context window strategy for this task    |
+
+Use `ash --continue-on-error` (or `-k`) to keep running after task failures regardless of `on_fail`.
+
 ---
 
 ## Session Blocks
@@ -87,6 +100,23 @@ session {
   do "Refactor the AST"
 }
 ```
+
+A toggle form (`begin` / `end`) spans non-contiguous code without nesting:
+
+```ash
+session begin
+do "Research approach"
+do "Draft prototype"
+session end
+
+# ... intervening code ...
+
+session begin
+do "Finalize implementation"
+session end
+```
+
+Mix toggle and block forms as long as they are not nested. `session begin` errs if a session is already active. `session end` errs without a matching `begin`.
 
 ---
 
@@ -117,6 +147,70 @@ while RETRIES < 3 {
   RETRIES = RETRIES + 1
 }
 ```
+
+### Try blocks
+
+Binary try — retries on failure, runs an optional fail block:
+
+```ash
+try {
+  do "Deploy to staging"
+} fail {
+  print "deployment failed, rolling back"
+} upto 3
+```
+
+Eval try — evaluates a condition after each attempt:
+
+```ash
+try {
+  do "Generate report"
+} evaluate with {
+  SCORE >= 85
+} accept {
+  print "quality threshold met"
+} partial {
+  print "attempt ${ATTEMPT} below threshold, retrying"
+  ATTEMPT = ATTEMPT + 1
+} fail {
+  print "unexpected error"
+} upto 5
+```
+
+| Clause     | Runs when                         |
+|------------|-----------------------------------|
+| `accept`   | Evaluator returns truthy / $? == 0 |
+| `partial`  | Evaluator returns falsy / $? == 1 |
+| `fail`     | Body errors or evaluator $? >= 2  |
+| `upto N`   | Maximum retry count                |
+
+The `error` variable is set to the error message when a body statement fails. The `report` variable captures `print` output from the evaluator block.
+
+---
+
+## Directory Scoping (`within`)
+
+Run code inside a specific directory — block form:
+
+```ash
+within "/tmp" {
+  CWD = $(pwd)
+  print "inside ${CWD}"
+}
+```
+
+Toggle form (`begin` / `end`) with stack-based nesting:
+
+```ash
+within begin "/tmp"
+  do "work in tmp"
+within begin "/var"
+  do "also work in var"
+within end
+within end
+```
+
+`within begin` with a non-existent path errors. `within end` without matching `begin` errors.
 
 ---
 
@@ -151,11 +245,95 @@ build()
 | `include "file.ash"` | Load another ash script |
 | `env KEY` | Read an environment variable |
 | `exit code` | Exit the script |
+| `return [val]` | Return from a function |
+| `break` | Exit a for/while loop |
+| `continue` | Skip to next loop iteration |
+| `compact "directive"` | Set context window strategy |
+| `within <dir> { }` | Run block in a different directory |
 
-Inline command substitution inside strings:
+---
+
+## Background & Parallel Execution
+
+Run a statement in the background with `&`:
 
 ```ash
-FILES = "$(find src -name '*.ts')"
+do "Long running analysis" &
+print "main continues immediately"
+wait
+```
+
+Run multiple statements in parallel with `wait { }`:
+
+```ash
+wait {
+  do "Train model A"
+  do "Train model B"
+}
+print "both models done"
+```
+
+---
+
+## Arrays
+
+Array literals and index access:
+
+```ash
+FRUITS = ["apple", "banana", "cherry"]
+print len(FRUITS)           # → 3
+print FRUITS[0]              # → apple
+MIXED = ["hello", 42, true]  # mixed types
+EMPTY = []
+```
+
+Concatenate with `+`:
+
+```ash
+A = [1, 2]
+B = [3, 4]
+C = A + B                    # [1, 2, 3, 4]
+```
+
+Loop over arrays with `for`:
+
+```ash
+for ITEM in ["x", "y", "z"] {
+  print ITEM
+}
+```
+
+Built-in functions: `len()` (string or array length), `range(N)` / `range(start, end)`.
+
+---
+
+## File-based Prompts (`@file`)
+
+Load a prompt from a file with variable interpolation:
+
+```ash
+VAR1 = "hello"
+VAR2 = "world"
+do @"path/to/prompt.md"
+```
+
+The file is read, `${VAR}` placeholders are resolved, and the result is sent to the agent.
+
+---
+
+## Compact Mode
+
+Control context window strategy:
+
+```ash
+compact "truncate 32000"    # truncate to 32K tokens
+compact "summarize"          # summarize older context
+```
+
+Per-call compact overrides on `do`:
+
+```ash
+do "Review this file" compact "summarize"
 ```
 
 ---
@@ -206,11 +384,13 @@ MSG = "hello ${NAME}"
 
 Built-in variables:
 
-| Variable | Set by | Description |
-|----------|--------|-------------|
-| `$?` | `do`, `exec`, function calls | Exit code (0 = success) |
-| `stdout` | `do`, `exec` | Stdout from the last call |
-| `stderr` | `do`, `exec` | Stderr from the last call |
+| Variable  | Set by                   | Description                                              |
+|-----------|--------------------------|----------------------------------------------------------|
+| `$?`      | `do`, `exec`, fn calls   | Exit code (0 = success)                                  |
+| `stdout`  | `do`, `exec`             | Stdout from the last call                                |
+| `stderr`  | `do`, `exec`             | Stderr from the last call                                |
+| `error`   | eval try body failure     | Error message when a body statement fails                |
+| `report`  | eval try evaluator block  | Captured `print` output from the `evaluate with` block   |
 
 ---
 

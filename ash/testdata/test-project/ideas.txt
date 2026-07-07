@@ -1,0 +1,3 @@
+Build a simple CLI task manager called "tasker" that tracks todos with
+priorities, due dates, and completion status. Store tasks in a local JSON
+file. Support add, list, complete, delete, and filter operations.

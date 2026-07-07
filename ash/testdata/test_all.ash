@@ -4,6 +4,15 @@
 # ============================================================================
 # ash language — master test runner
 # ============================================================================
+#
+# Run:    ash ash/testdata/test_all.ash
+#
+# Integration tests (directory-based orchestration) are run separately:
+#   ash ash/testdata/integration/
+#
+# CLI-level tests:
+#   bash ash/testdata/test_cli.sh
+# ============================================================================
 
 include "testdata/lang_tests.ash"
 include "testdata/agent_tests.ash"

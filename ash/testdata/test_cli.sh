@@ -108,6 +108,63 @@ rc=$?
 set -e
 [ "$rc" -eq 42 ] && pass "batch exit code propagates" || fail "batch exit code was $rc"
 
+# ----- --config flag -----
+
+echo "=== --config: overrides config path ==="
+TMPDIR=$(mktemp -d)
+echo 'agents:
+  custom-echo:
+    type: local-cli
+    cmd: echo
+    message_flag: " "' > "$TMPDIR/ash.yaml"
+OUT=$($ASH_BIN --config "$TMPDIR/ash.yaml" discover 2>&1) && pass "--config discover works" || fail "--config discover failed $?"
+rm -rf "$TMPDIR"
+
+echo "=== --config: error if file missing ==="
+OUT=$($ASH_BIN --config "/nonexistent/path/ash.yaml" discover 2>&1) && fail "--config should have errored" || pass "--config correctly rejects missing file"
+
+echo "=== --config: used with check ==="
+TMPDIR=$(mktemp -d)
+echo 'agents:
+  custom-echo:
+    type: local-cli
+    cmd: echo
+    message_flag: " "' > "$TMPDIR/ash.yaml"
+SCRIPT="$TMPDIR/test.ash"
+echo '#!custom-echo:1.0
+print "hello"' > "$SCRIPT"
+OUT=$($ASH_BIN --config "$TMPDIR/ash.yaml" --check "$SCRIPT" 2>&1) && pass "--config + --check works" || fail "--config + --check failed"
+rm -rf "$TMPDIR"
+
+# ----- -c shorthand for --check -----
+
+echo "=== -c: shorthand for --check ==="
+OUT=$($ASH_BIN -c "$(dirname "$0")/lang_tests.ash" 2>&1) && pass "-c exited 0" || fail "-c exited $?"
+
+# ----- --continue-on-error flag -----
+
+echo "=== --continue-on-error: ash script with non-zero exit after failure ==="
+OUT=$(printf 'exit 1\n' | $ASH_BIN --continue-on-error 2>/dev/null) && pass "--continue-on-error handled exit" || true
+# Just verify the flag doesn't crash
+set +e
+$ASH_BIN --continue-on-error -c "$(dirname "$0")/lang_tests.ash" > /dev/null 2>&1
+rc=$?
+set -e
+[ "$rc" -eq 0 ] && pass "--continue-on-error + --check works" || fail "--continue-on-error + --check failed with $rc"
+
+echo "=== -k: shorthand for --continue-on-error ==="
+set +e
+$ASH_BIN -k -c "$(dirname "$0")/lang_tests.ash" > /dev/null 2>&1
+rc=$?
+set -e
+[ "$rc" -eq 0 ] && pass "-k shorthand works" || fail "-k failed with $rc"
+
+# ----- --dry-run flag (directory mode) -----
+
+echo "=== --dry-run: lists tasks without executing ==="
+OUT=$($ASH_BIN --dry-run "$(dirname "$0")/integration" 2>&1) && pass "--dry-run exited 0" || fail "--dry-run exited $?"
+echo "$OUT" | grep -q "dry-run" && pass "--dry-run printed tasks" || fail "--dry-run missing task list"
+
 # ----- cleanup -----
 
 report

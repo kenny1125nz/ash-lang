@@ -99,7 +99,7 @@
           "patterns": [
             {
               "name": "support.variable.predefined.ash",
-              "match": "(stderr|stdout|report|\\?)"
+              "match": "(stderr|stdout|report|error|\\?)"
             }
           ]
         },

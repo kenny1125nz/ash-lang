@@ -602,3 +602,20 @@ do "toggle with compact" compact "truncate 100"
 print "  stdout: ${stdout}"
 session end
 print "  session + compact works"
+
+# ---------------------------------------------------------------------------
+# 61. Eval try — error variable set on body failure
+# ---------------------------------------------------------------------------
+print "=== 61. Error variable on body failure ==="
+try {
+  exec sh -c "exit 1"
+} evaluate with {
+  false
+} accept {
+  print "  FAIL: body failed, should not accept"
+} partial {
+  print "  partial: error=${error}"
+} fail {
+  print "  fail: error=${error}"
+} upto 2
+print "  error was: ${error}"
