@@ -130,4 +130,4 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           npm install -g wrangler
-          wrangler pages deploy web-site --project-name=green-band-aooriwu
+          wrangler pages deploy web-site --project-name=green-band-aooriwu --production
