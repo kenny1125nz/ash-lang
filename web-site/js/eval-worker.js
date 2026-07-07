@@ -76,12 +76,20 @@ self.onmessage = function (e) {
     });
   }
   if (e.data.type === 'repl_init' && ashWasm) {
-    ashWasm.repl_init();
-    self.postMessage({ type: 'repl_ready' });
+    try {
+      ashWasm.repl_init();
+      self.postMessage({ type: 'repl_ready' });
+    } catch (e) {
+      self.postMessage({ type: 'repl_result', output: 'Error in repl_init: ' + e.message });
+    }
   }
   if (e.data.type === 'repl_eval' && ashWasm) {
-    const result = ashWasm.repl_eval(e.data.line);
-    self.postMessage({ type: 'repl_result', output: result });
+    try {
+      const result = ashWasm.repl_eval(e.data.line);
+      self.postMessage({ type: 'repl_result', output: result || '' });
+    } catch (e) {
+      self.postMessage({ type: 'repl_result', output: 'Error: ' + e.message });
+    }
   }
 };
 

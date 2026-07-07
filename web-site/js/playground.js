@@ -163,6 +163,8 @@ function replEvalLine(line) {
 }
 
 function replSubmit() {
+  if (!workerReady) { showToast('WASM is still loading...', true); return; }
+
   const line = replInputEl.value;
   replInputEl.value = '';
 
@@ -209,6 +211,9 @@ function setupWorkerHandlers() {
         resData = new DataView(msg.resBuf);
       }
       workerReady = true;
+      if (replPanelEl.style.display === 'flex' && !replReady) {
+        replInit();
+      }
       return;
     }
 
