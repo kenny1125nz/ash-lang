@@ -415,6 +415,7 @@ pub fn run_tree(config: WalkConfig, eval: &mut Evaluator) -> i32 {
                     model: model.to_string(),
                     dir: String::new(),
                     session: false,
+                    yes: false,
                 };
 
                 let resp = if let Some(eng) = agent {

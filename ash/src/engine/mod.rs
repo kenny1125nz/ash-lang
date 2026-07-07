@@ -1,6 +1,7 @@
 pub mod adapter;
 pub mod api;
 pub mod browser;
+pub mod catalog;
 pub mod config;
 pub mod container;
 pub mod discovery;
@@ -10,6 +11,7 @@ pub mod types;
 pub use adapter::{Adapter, LocalCliAdapter};
 pub use api::ApiAdapter;
 pub use browser::{BrowserAdapter, BrowserFallback};
+pub use catalog::{embedded_catalog, fetch_catalog, load_catalog, CATALOG_URL};
 pub use config::{AgentConfig, ApiEndpoint, AuthConfig, ContainerConfig};
 pub use container::ContainerAdapter;
 pub use discovery::{discover, discover_and_register, discovery_summary, generate_yaml, print_discovery, read_config, write_config, DiscoveryResult};
@@ -62,22 +64,6 @@ pub fn register_defaults() {
         "echo",
         Arc::new(LocalCliAdapter::new("echo", Arc::new(EchoDriver))),
     );
-
-    register(
-        "opencode",
-        Arc::new(LocalCliAdapter::new("opencode", Arc::new(OpenCodeDriver))),
-    );
-
-    register(
-        "claude-code",
-        Arc::new(LocalCliAdapter::new("claude-code", Arc::new(ClaudeDriver))),
-    );
-
-    register(
-        "aider",
-        Arc::new(LocalCliAdapter::new("aider", Arc::new(AiderDriver))),
-    );
-
 }
 
 #[cfg(test)]
@@ -96,6 +82,7 @@ mod tests {
             session_flag: None,
             message_flag: None,
             stdin_prompt: false,
+            yes_flag: None,
             base_url: String::new(),
             auth: None,
             endpoint: ApiEndpoint { method: String::new(), path: String::new() },
@@ -117,6 +104,7 @@ mod tests {
             session_flag: None,
             message_flag: None,
             stdin_prompt: false,
+            yes_flag: None,
             base_url: String::new(),
             auth: None,
             endpoint: ApiEndpoint { method: String::new(), path: String::new() },
@@ -138,6 +126,7 @@ mod tests {
             session_flag: None,
             message_flag: None,
             stdin_prompt: false,
+            yes_flag: None,
             base_url: String::new(),
             auth: None,
             endpoint: ApiEndpoint { method: String::new(), path: String::new() },
@@ -159,6 +148,7 @@ mod tests {
             session_flag: None,
             message_flag: None,
             stdin_prompt: false,
+            yes_flag: None,
             base_url: String::new(),
             auth: None,
             endpoint: ApiEndpoint { method: String::new(), path: String::new() },

@@ -46,6 +46,7 @@ impl Evaluator {
             model: model_str.clone(),
             dir: dir_str.clone(),
             session: self.session_depth > 0,
+            yes: false,
         };
 
         let agent_name = n

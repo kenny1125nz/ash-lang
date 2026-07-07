@@ -1,4 +1,3 @@
-# Initialize git repository
-_ = $(git init)
-_ = $(git checkout -b main)
-do @init.dm 
+exec git init
+exec git checkout -b main
+print "Git repository initialized"

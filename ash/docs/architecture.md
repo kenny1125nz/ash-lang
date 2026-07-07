@@ -292,7 +292,7 @@ trait Adapter: Send + Sync {
 Thread-safe global registry:
 - `OnceLock<Mutex<HashMap<String, Arc<dyn Adapter>>>>`
 - `register(name, adapter)`, `get(name)` → `Option<Arc<dyn Adapter>>`
-- `register_defaults()` — registers `echo`, `opencode`, `claude-code`, `aider`
+- `register_defaults()` — registers built-in agents; `discover_and_register()` probes all 11 template agents in parallel
 
 ### Adapter Types
 
@@ -310,6 +310,7 @@ flowchart LR
         oc["OpenCodeDriver<br/>opencode run"]
         cc["ClaudeDriver<br/>claude --msg"]
         aider["AiderDriver<br/>aider --msg"]
+        generic["GenericDriver<br/>config-driven<br/>(codex, kimi, gemini, ...)"]
     end
 
     Adapters --> trait["Adapter trait<br/>execute(req) -> resp"]
@@ -335,7 +336,8 @@ flowchart LR
 | `EchoDriver` | `echo` | `echo "<prompt>"` |
 | `OpenCodeDriver` | `opencode` | `opencode run [--model M] [--continue] <prompt>` |
 | `ClaudeDriver` | `claude` | `claude [--continue] [--model M] --msg <prompt>` |
-| `AiderDriver` | `aider` | `aider [--model M] [--restore-chat-history] --msg <prompt>` |
+| `AiderDriver` | `aider` | `aider [--yes] [--model M] [--restore-chat-history] --msg <prompt>` |
+| `GenericDriver` | config-driven | `{args} [yes_flag] [model_flag M] [session_flag] [message_flag prompt]` |
 
 ### Config (`engine/config.rs`)
 `AgentConfig` struct covers all adapter types with fields for type, driver,
@@ -345,15 +347,15 @@ command, API endpoint/auth, and container config.
 
 ```mermaid
 flowchart LR
-    subgraph Known["Known Agents"]
-        dirs["echo<br/>opencode<br/>claude-code<br/>aider"]
+    subgraph Template["Agent Template (11)"]
+        dirs["echo, opencode, claude-code,<br/>aider, codex, gemini-cli,<br/>kimi, pi, goose, qwen-code, amazon-q"]
     end
 
-    for_each["for each agent"] --> which["which &lt;binary&gt;"]
+    for_each["parallel probe<br/>each agent"] --> which["which &lt;binary&gt;"]
     which --> found{"found?"}
 
     found -->|yes| version["probe --version"]
-    found -->|no| not_found["mark not found"]
+    found -->|no| not_found["mark not found<br/>show install hint"]
 
     version --> caps["probe --help<br/>for --model / --continue"]
     caps --> result["DiscoveredAgent<br/>{name, path, version,<br/>supports_model, supports_session}"]
@@ -363,21 +365,21 @@ flowchart LR
 
     register["discover_and_register()"] --> reg["engine::register(name, adapter)"]
 
-    write_config["discover --write"] --> yaml["generate ash-project.yaml"]
+    write_config["discover --write"] --> yaml["generate ash.yml"]
     yaml --> read["read_config()<br/>parses YAML back<br/>into AgentConfig"]
-    read --> generic["GenericDriver<br/>reads model_flag,<br/>session_flag, message_flag<br/>from config fields"]
+    read --> generic["GenericDriver<br/>reads model_flag,<br/>session_flag, message_flag,<br/>yes_flag from config fields"]
 ```
 
-- Scans PATH for known agents (`which`)
+- Scans PATH for all 11 template agents in parallel (`which`, via threads + mpsc)
 - Probes version (`--version`) and capabilities (`--help` for `--model`/`--continue` flags)
-- Can generate `ash-project.yaml` via `discover --write`
+- Can generate `ash.yml` via `discover --write`
 - `discover_and_register()` — discovers and registers found agents automatically
-- `read_config()` — parses `ash-project.yaml` back into `Vec<AgentConfig>` (supports both old `driver:` format and new structured fields)
-- `GenericDriver` — reads all command construction from config fields (`cmd`, `args`, `model_flag`, `session_flag`, `message_flag`, `stdin_prompt`), enabling custom agents without Rust code
+- `read_config()` — parses `ash.yml` back into `Vec<AgentConfig>` (supports both old `driver:` format and new structured fields)
+- `GenericDriver` — reads all command construction from config fields (`cmd`, `args`, `model_flag`, `session_flag`, `message_flag`, `stdin_prompt`, `yes_flag`), enabling custom agents without Rust code
 
 ### Generic Driver (`engine/driver.rs`)
 
-New agents can be added to `ash-project.yaml` without writing Rust code:
+New agents can be added to `ash.yml` without writing Rust code:
 
 ```yaml
 agents:
@@ -388,6 +390,7 @@ agents:
     args: ["copilot", "suggest"]
     model_flag: "--model"
     message_flag: "--prompt"
+    yes_flag: "--yes"
 ```
 
 When `from_config()` encounters a `LocalCli` config with no known `driver:` field, it creates a `GenericDriver` that constructs the command line from the structured fields:
@@ -400,6 +403,7 @@ When `from_config()` encounters a `LocalCli` config with no known `driver:` fiel
 | `session_flag` | e.g. `--continue` — passed when session mode is active |
 | `message_flag` | e.g. `--msg` — passed before the prompt; without this, prompt is the last positional arg |
 | `stdin_prompt` | When `true`, prompt is piped to stdin instead of CLI arg |
+| `yes_flag` | e.g. `--yolo` — passed when auto-approve mode is active |
 
 ---
 

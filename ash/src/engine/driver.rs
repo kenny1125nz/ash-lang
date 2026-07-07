@@ -127,6 +127,11 @@ impl LocalCliDriver for GenericDriver {
 
     fn build_command(&self, req: &ExecuteRequest) -> CommandSpec {
         let mut args = self.config.args.clone();
+        if req.yes {
+            if let Some(ref flag) = self.config.yes_flag {
+                args.push(flag.clone());
+            }
+        }
         if !req.model.is_empty() {
             if let Some(ref flag) = self.config.model_flag {
                 args.push(flag.clone());
@@ -169,6 +174,7 @@ mod tests {
             session_flag: None,
             message_flag: None,
             stdin_prompt: false,
+            yes_flag: None,
             base_url: String::new(),
             auth: None,
             endpoint: ApiEndpoint {
@@ -190,6 +196,7 @@ mod tests {
             model: String::new(),
             dir: String::new(),
             session: false,
+            yes: false,
         }
     }
 
@@ -306,5 +313,25 @@ mod tests {
         let driver = GenericDriver::new(cfg);
         let spec = driver.build_command(&make_req(""));
         assert_eq!(spec.args, vec![""]);
+    }
+
+    #[test]
+    fn test_yes_flag_when_enabled() {
+        let mut cfg = make_config();
+        cfg.yes_flag = Some("--yolo".into());
+        let mut req = make_req("hello");
+        req.yes = true;
+        let driver = GenericDriver::new(cfg);
+        let spec = driver.build_command(&req);
+        assert_eq!(spec.args, vec!["--yolo", "hello"]);
+    }
+
+    #[test]
+    fn test_yes_flag_omitted_when_disabled() {
+        let mut cfg = make_config();
+        cfg.yes_flag = Some("--yolo".into());
+        let driver = GenericDriver::new(cfg);
+        let spec = driver.build_command(&make_req("hello"));
+        assert_eq!(spec.args, vec!["hello"]);
     }
 }

@@ -1,6 +1,6 @@
 # Ash — Quick Start
 
-**Version:** 0.1.0   **File Extension:** `.ash`
+**Version:** 0.2.0   **File Extension:** `.ash`
 
 Ash is a scripting language for composing AI coding agents into automated workflows. You tell agents what to do, and ash orchestrates their execution.
 
@@ -18,7 +18,7 @@ do "Fix the login bug in src/auth/login.ts" with opencode
 
 | Clause | Example | Description |
 |--------|---------|-------------|
-| `with <agent>` | `with opencode` | Which agent to invoke (opencode, claude-code, aider) |
+| `with <agent>` | `with opencode` | Which agent to invoke (opencode, claude-code, kimi, codex, ...) |
 | `using <model>` | `using sonnet` | Override the AI model |
 
 ---
@@ -32,7 +32,7 @@ ash --check script.ash             # validate syntax only
 ash -c script.ash                  # shorthand for --check
 ash --agent opencode:sonnet        # default agent and model
 ash tasks/ --dry-run               # preview without executing
-ash --config path/to/ash.yaml      # custom config file path
+ash --config path/to/ash.yml      # custom config file path
 ash --continue-on-error            # keep going after task failure
 ash -k                             # shorthand for --continue-on-error
 ```
@@ -341,11 +341,11 @@ do "Review this file" compact "summarize"
 ## Agent Discovery
 
 ```bash
-ash discover            # list available agents
-ash discover --write    # generate ash-project.yaml
+ash discover            # list available agents (parallel probe)
+ash discover --write    # generate ash.yml
 ```
 
-On startup, ash auto-discovers installed agents. Add custom agents to `ash-project.yaml`:
+On startup, ash auto-discovers installed agents from a built-in template (opencode, claude-code, kimi, codex, gemini-cli, pi, goose, qwen-code, amazon-q, aider, echo). Only agents found on PATH are registered. Custom agents can be added to `ash.yml`:
 
 ```yaml
 agents:
@@ -353,6 +353,7 @@ agents:
     type: local-cli
     cmd: my-tool
     message_flag: "--prompt"
+    yes_flag: "--yes"
 ```
 
 ---

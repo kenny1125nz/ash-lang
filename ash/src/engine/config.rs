@@ -48,6 +48,9 @@ pub struct AgentConfig {
     pub message_flag: Option<String>,
     /// When true, the prompt is piped to stdin instead of passed as a CLI arg.
     pub stdin_prompt: bool,
+    /// Flag passed when auto-approve/yes mode is requested, e.g. "--yolo" or "--yes".
+    /// Omitted when yes mode is off.
+    pub yes_flag: Option<String>,
     /// API adapter fields
     pub base_url: String,
     pub auth: Option<AuthConfig>,

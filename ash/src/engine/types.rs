@@ -23,6 +23,7 @@ pub struct ExecuteRequest {
     pub model: String,
     pub dir: String,
     pub session: bool,
+    pub yes: bool,
 }
 
 #[derive(Debug, Clone)]

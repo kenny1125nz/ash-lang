@@ -33,7 +33,7 @@ Or download a prebuilt binary from [GitHub Releases](https://github.com/kenny112
 
 ### Configure your agent
 
-Create `ash.yaml` in your project root:
+Create `ash.yml` in your project root:
 
 ```yaml
 default_agent: opencode
@@ -49,7 +49,7 @@ ash --agent opencode tasks/
 
 ```
 my-project/
-├── ash.yaml
+├── ash.yml
 └── tasks/
     ├── 1-init/
     │   └── 01-setup.md

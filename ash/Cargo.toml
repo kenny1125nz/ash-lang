@@ -1,13 +1,18 @@
 [package]
 name = "ash"
-version = "0.1.4"
+version = "0.2.0"
 edition = "2021"
 
 [dependencies]
 regex = "1"
 log = { version = "0.4", features = ["std"] }
 rustyline = { version = "14", optional = true }
+ureq = { version = "3", optional = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
 
 [features]
-default = ["repl"]
+default = ["repl", "online-catalog"]
 repl = ["rustyline"]
+online-catalog = ["ureq"]

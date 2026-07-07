@@ -1,78 +1,15 @@
 use std::process::Command;
+use std::sync::mpsc;
 
+use super::catalog;
 use super::config::{AgentConfig, ApiEndpoint, ContainerConfig};
 use super::from_config;
 use super::register;
 use super::types::AgentType;
 
-struct DriverInfo {
-    pub agent_name: &'static str,
-    pub binary_name: &'static str,
-    pub driver_name: &'static str,
-    pub cmd: &'static str,
-    pub args: &'static [&'static str],
-    pub model_flag: Option<&'static str>,
-    pub session_flag: Option<&'static str>,
-    pub message_flag: Option<&'static str>,
-    pub stdin_prompt: bool,
-    pub install_hint: &'static str,
-}
-
-const KNOWN_DRIVERS: &[DriverInfo] = &[
-    DriverInfo {
-        agent_name: "echo",
-        binary_name: "echo",
-        driver_name: "echo",
-        cmd: "echo",
-        args: &[],
-        model_flag: None,
-        session_flag: None,
-        message_flag: None,
-        stdin_prompt: false,
-        install_hint: "",
-    },
-    DriverInfo {
-        agent_name: "opencode",
-        binary_name: "opencode",
-        driver_name: "opencode",
-        cmd: "opencode",
-        args: &["run"],
-        model_flag: Some("--model"),
-        session_flag: Some("--continue"),
-        message_flag: None,
-        stdin_prompt: false,
-        install_hint: "npm i -g @anomalyco/opencode",
-    },
-    DriverInfo {
-        agent_name: "claude-code",
-        binary_name: "claude",
-        driver_name: "claude-code",
-        cmd: "claude",
-        args: &[],
-        model_flag: Some("--model"),
-        session_flag: Some("--continue"),
-        message_flag: Some("--msg"),
-        stdin_prompt: false,
-        install_hint: "npm i -g @anthropic-ai/claude-code",
-    },
-    DriverInfo {
-        agent_name: "aider",
-        binary_name: "aider",
-        driver_name: "aider",
-        cmd: "aider",
-        args: &[],
-        model_flag: Some("--model"),
-        session_flag: Some("--restore-chat-history"),
-        message_flag: Some("--msg"),
-        stdin_prompt: false,
-        install_hint: "pip install aider-chat",
-    },
-];
-
 #[derive(Debug, Clone)]
 pub struct DiscoveredAgent {
     pub name: String,
-    pub driver: String,
     pub path: String,
     pub version: Option<String>,
     pub supports_model: bool,
@@ -134,24 +71,59 @@ fn probe_capabilities(binary: &str) -> (bool, bool) {
     (supports_model, supports_session)
 }
 
+struct ProbeResult {
+    name: String,
+    path: Option<String>,
+    version: Option<String>,
+    supports_model: bool,
+    supports_session: bool,
+    found: bool,
+    install_hint: String,
+}
+
+/// Load the agent catalog: try remote, fall back to embedded.
 pub fn discover() -> DiscoveryResult {
-    let mut agents = Vec::new();
+    let catalog = catalog::load_catalog();
+    let (tx, rx) = mpsc::channel();
+    let mut handles = Vec::new();
 
-    for info in KNOWN_DRIVERS {
-        let found_path = find_binary(info.binary_name);
+    for entry in &catalog {
+        let tx = tx.clone();
+        let name = entry.name.clone();
+        let binary = entry.binary.clone();
+        let install_hint = entry.install_hint.clone();
 
-        let (version, supports_model, supports_session) = if found_path.is_some() {
-            let v = probe_version(info.binary_name);
-            let (m, s) = probe_capabilities(info.binary_name);
-            (v, m, s)
-        } else {
-            (None, false, false)
-        };
+        handles.push(std::thread::spawn(move || {
+            let found_path = find_binary(&binary);
 
-        let found = found_path.is_some() || info.agent_name == "echo";
+            let (version, supports_model, supports_session) = if found_path.is_some() {
+                let v = probe_version(&binary);
+                let (m, s) = probe_capabilities(&binary);
+                (v, m, s)
+            } else {
+                (None, false, false)
+            };
 
-        let path = found_path.unwrap_or_else(|| {
-            if info.agent_name == "echo" {
+            let found = found_path.is_some() || name == "echo";
+
+            let _ = tx.send(ProbeResult {
+                name,
+                path: found_path,
+                version,
+                supports_model,
+                supports_session,
+                found,
+                install_hint,
+            });
+        }));
+    }
+
+    drop(tx);
+
+    let mut agents: Vec<DiscoveredAgent> = Vec::new();
+    for result in rx {
+        let path = result.path.unwrap_or_else(|| {
+            if result.name == "echo" {
                 "shell builtin".to_string()
             } else {
                 String::new()
@@ -159,44 +131,32 @@ pub fn discover() -> DiscoveryResult {
         });
 
         agents.push(DiscoveredAgent {
-            name: info.agent_name.to_string(),
-            driver: info.driver_name.to_string(),
+            name: result.name,
             path,
-            version,
-            supports_model,
-            supports_session,
-            found,
-            install_hint: info.install_hint.to_string(),
+            version: result.version,
+            supports_model: result.supports_model,
+            supports_session: result.supports_session,
+            found: result.found,
+            install_hint: result.install_hint,
         });
     }
 
-    DiscoveryResult { agents }
-}
-
-fn build_agent_config(info: &DriverInfo) -> AgentConfig {
-    AgentConfig {
-        name: info.agent_name.to_string(),
-        agent_type: AgentType::LocalCli,
-        driver: Some(info.driver_name.to_string()),
-        cmd: info.cmd.to_string(),
-        args: info.args.iter().map(|s| s.to_string()).collect(),
-        model_flag: info.model_flag.map(|s| s.to_string()),
-        session_flag: info.session_flag.map(|s| s.to_string()),
-        message_flag: info.message_flag.map(|s| s.to_string()),
-        stdin_prompt: info.stdin_prompt,
-        base_url: String::new(),
-        auth: None,
-        endpoint: ApiEndpoint {
-            method: String::new(),
-            path: String::new(),
-        },
-        container: ContainerConfig {
-            runtime: String::new(),
-            image: String::new(),
-            mode: String::new(),
-            volumes: Vec::new(),
-        },
+    // Re-sort by catalog order for deterministic output
+    let mut ordered: Vec<DiscoveredAgent> = Vec::new();
+    let catalog_names: Vec<&str> = catalog.iter().map(|e| e.name.as_str()).collect();
+    for cat_name in &catalog_names {
+        if let Some(agent) = agents.iter().find(|a| a.name.as_str() == *cat_name) {
+            ordered.push(agent.clone());
+        }
     }
+    // Append any agents not in catalog (shouldn't happen, but be safe)
+    for agent in &agents {
+        if !catalog_names.contains(&agent.name.as_str()) {
+            ordered.push(agent.clone());
+        }
+    }
+
+    DiscoveryResult { agents: ordered }
 }
 
 fn yaml_line(key: &str, value: &str) -> String {
@@ -237,20 +197,20 @@ pub fn generate_yaml(result: &DiscoveryResult) -> String {
         return yaml;
     }
 
-    for info in KNOWN_DRIVERS {
-        if !found_names.contains(info.agent_name) {
+    let catalog = catalog::load_catalog();
+    for entry in &catalog {
+        if !found_names.contains(entry.name.as_str()) {
             continue;
         }
-        yaml.push_str(&format!("  {}:\n", info.agent_name));
-        let cfg = build_agent_config(info);
+        yaml.push_str(&format!("  {}:\n", entry.name));
         yaml.push_str(&yaml_line("type", "local-cli"));
-        // Emit the structured fields. Omit driver: so read_config() uses GenericDriver.
-        yaml.push_str(&yaml_line("cmd", &cfg.cmd));
-        yaml.push_str(&yaml_line_args("args", &cfg.args));
-        yaml.push_str(&yaml_line_opt("model_flag", info.model_flag));
-        yaml.push_str(&yaml_line_opt("session_flag", info.session_flag));
-        yaml.push_str(&yaml_line_opt("message_flag", info.message_flag));
-        yaml.push_str(&yaml_line_bool("stdin_prompt", cfg.stdin_prompt));
+        yaml.push_str(&yaml_line("cmd", &entry.cmd));
+        yaml.push_str(&yaml_line_args("args", &entry.args));
+        yaml.push_str(&yaml_line_opt("model_flag", entry.model_flag.as_deref()));
+        yaml.push_str(&yaml_line_opt("session_flag", entry.session_flag.as_deref()));
+        yaml.push_str(&yaml_line_opt("message_flag", entry.message_flag.as_deref()));
+        yaml.push_str(&yaml_line_bool("stdin_prompt", entry.stdin_prompt));
+        yaml.push_str(&yaml_line_opt("yes_flag", entry.yes_flag.as_deref()));
     }
 
     yaml
@@ -335,14 +295,15 @@ pub fn discovery_summary(result: &DiscoveryResult) -> String {
 
 pub fn discover_and_register() -> DiscoveryResult {
     let result = discover();
+    let catalog = catalog::load_catalog();
 
-    for info in KNOWN_DRIVERS {
-        let found = result.agents.iter().any(|a| a.name == info.agent_name && a.found);
+    for entry in &catalog {
+        let found = result.agents.iter().any(|a| a.name == entry.name && a.found);
         if !found {
             continue;
         }
 
-        let config = build_agent_config(info);
+        let config = entry.to_config();
         let adapter = from_config(&config);
         register(&config.name, adapter);
     }
@@ -350,25 +311,73 @@ pub fn discover_and_register() -> DiscoveryResult {
     result
 }
 
-fn parse_yaml_array(s: &str) -> Vec<String> {
-    let s = s.trim();
-    if !s.starts_with('[') || !s.ends_with(']') {
-        return Vec::new();
-    }
-    let inner = s[1..s.len() - 1].trim();
-    if inner.is_empty() {
-        return Vec::new();
-    }
-    inner
-        .split(',')
-        .map(|item| {
-            let item = item.trim().trim_matches('"').trim_matches('\'');
-            item.to_string()
-        })
-        .collect()
+/// YAML config file structure — maps directly to the `ash.yml` format.
+#[derive(Debug, Clone, serde::Deserialize)]
+struct ConfigFile {
+    #[serde(default)]
+    agents: std::collections::BTreeMap<String, AgentDef>,
 }
 
-/// Parse `ash.yaml` and return the list of configured agents.
+/// A single agent definition in the config YAML.
+#[derive(Debug, Clone, serde::Deserialize)]
+struct AgentDef {
+    #[serde(rename = "type", default)]
+    agent_type: Option<String>,
+    driver: Option<String>,
+    cmd: Option<String>,
+    args: Option<Vec<String>>,
+    model_flag: Option<String>,
+    session_flag: Option<String>,
+    message_flag: Option<String>,
+    stdin_prompt: Option<bool>,
+    yes_flag: Option<String>,
+}
+
+fn merge_into_config(name: &str, def: AgentDef) -> AgentConfig {
+    let agent_type = match def.agent_type.as_deref() {
+        Some("api") => AgentType::Api,
+        Some("container") => AgentType::Container,
+        Some("browser") => AgentType::Browser,
+        _ => AgentType::LocalCli,
+    };
+    let args = def.args.unwrap_or_default();
+
+    // For `local-cli` with a known `driver:` name (old format), leave cmd empty
+    // so `from_config()` dispatches to the hardcoded driver. Otherwise use `cmd`.
+    let has_driver = def.driver.is_some() && agent_type == AgentType::LocalCli;
+    let cmd = if has_driver {
+        def.cmd.unwrap_or_default()
+    } else {
+        def.cmd.unwrap_or_default()
+    };
+
+    AgentConfig {
+        name: name.to_string(),
+        agent_type,
+        driver: def.driver,
+        cmd,
+        args,
+        model_flag: def.model_flag,
+        session_flag: def.session_flag,
+        message_flag: def.message_flag,
+        stdin_prompt: def.stdin_prompt.unwrap_or(false),
+        yes_flag: def.yes_flag,
+        base_url: String::new(),
+        auth: None,
+        endpoint: ApiEndpoint {
+            method: String::new(),
+            path: String::new(),
+        },
+        container: ContainerConfig {
+            runtime: String::new(),
+            image: String::new(),
+            mode: String::new(),
+            volumes: Vec::new(),
+        },
+    }
+}
+
+/// Parse the agent config file and return the list of configured agents.
 ///
 /// Supports both the old format with `driver:` (backward compat) and the new
 /// format with structured fields (`cmd`, `args`, `model_flag`, etc.).
@@ -376,128 +385,18 @@ pub fn read_config(path: &str) -> Result<Vec<AgentConfig>, String> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| format!("failed to read {}: {}", path, e))?;
 
-    let mut agents = Vec::new();
-    let mut current_name: Option<String> = None;
-    let mut in_agents = false;
-
-    for line in content.lines() {
-        let trimmed = line.trim();
-
-        if trimmed.is_empty() || trimmed.starts_with('#') {
-            continue;
-        }
-
-        if trimmed == "agents:" {
-            in_agents = true;
-            continue;
-        }
-
-        if !in_agents {
-            continue;
-        }
-
-        let indent = line.len() - line.trim_start().len();
-
-        // Indent 0 means we've left the agents section
-        if indent == 0 {
-            in_agents = false;
-            current_name = None;
-            continue;
-        }
-
-        // Indent 2: agent name line, e.g. "  opencode:"
-        if indent == 2 && trimmed.ends_with(':') {
-            current_name = Some(trimmed.trim_end_matches(':').to_string());
-            continue;
-        }
-
-        // Indent 4: key: value pairs
-        if indent == 4 {
-            if let Some(ref name) = current_name {
-                if let Some((key, value)) = trimmed.split_once(':') {
-                    let key = key.trim();
-                    let raw_value = value.trim();
-
-                    // Find existing agent or create a new one
-                    let idx = agents.iter().position(|a: &AgentConfig| a.name == *name);
-                    let idx = idx.unwrap_or_else(|| {
-                        agents.push(AgentConfig {
-                            name: name.clone(),
-                            agent_type: AgentType::LocalCli,
-                            driver: None,
-                            cmd: String::new(),
-                            args: Vec::new(),
-                            model_flag: None,
-                            session_flag: None,
-                            message_flag: None,
-                            stdin_prompt: false,
-                            base_url: String::new(),
-                            auth: None,
-                            endpoint: ApiEndpoint {
-                                method: String::new(),
-                                path: String::new(),
-                            },
-                            container: ContainerConfig {
-                                runtime: String::new(),
-                                image: String::new(),
-                                mode: String::new(),
-                                volumes: Vec::new(),
-                            },
-                        });
-                        agents.len() - 1
-                    });
-                    let agent = &mut agents[idx];
-
-                    match key {
-                        "type" => {
-                            agent.agent_type = match raw_value {
-                                "api" => AgentType::Api,
-                                "container" => AgentType::Container,
-                                "browser" => AgentType::Browser,
-                                _ => AgentType::LocalCli,
-                            };
-                        }
-                        "driver" => {
-                            let v = raw_value.trim_matches('"').to_string();
-                            if !v.is_empty() {
-                                agent.driver = Some(v);
-                            }
-                        }
-                        "cmd" => {
-                            agent.cmd = raw_value.trim_matches('"').to_string();
-                        }
-                        "args" => {
-                            agent.args = parse_yaml_array(raw_value);
-                        }
-                        "model_flag" => {
-                            let v = raw_value.trim_matches('"').to_string();
-                            if !v.is_empty() {
-                                agent.model_flag = Some(v);
-                            }
-                        }
-                        "session_flag" => {
-                            let v = raw_value.trim_matches('"').to_string();
-                            if !v.is_empty() {
-                                agent.session_flag = Some(v);
-                            }
-                        }
-                        "message_flag" => {
-                            let v = raw_value.trim_matches('"').to_string();
-                            if !v.is_empty() {
-                                agent.message_flag = Some(v);
-                            }
-                        }
-                        "stdin_prompt" => {
-                            agent.stdin_prompt = raw_value == "true";
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        }
+    if content.trim().is_empty() {
+        return Ok(Vec::new());
     }
 
-    Ok(agents)
+    let config: ConfigFile =
+        serde_yaml::from_str(&content).map_err(|e| format!("failed to parse {}: {}", path, e))?;
+
+    Ok(config
+        .agents
+        .into_iter()
+        .map(|(name, def)| merge_into_config(&name, def))
+        .collect())
 }
 
 #[cfg(test)]
@@ -592,17 +491,10 @@ agents:
         let agents = read_config(path.to_str().unwrap()).unwrap();
         std::fs::remove_file(&path).ok();
         assert_eq!(agents.len(), 2);
-        assert_eq!(agents[0].name, "opencode");
-        assert_eq!(agents[1].name, "aider");
-        assert_eq!(agents[1].message_flag.as_deref(), Some("--msg"));
-    }
-
-    #[test]
-    fn test_parse_yaml_array() {
-        assert_eq!(parse_yaml_array(r#"["run"]"#), vec!["run"]);
-        assert_eq!(parse_yaml_array(r#"["copilot", "suggest"]"#), vec!["copilot", "suggest"]);
-        assert_eq!(parse_yaml_array(r#"[]"#), Vec::<String>::new());
-        assert_eq!(parse_yaml_array(""), Vec::<String>::new());
+        // BTreeMap sorts by name, so aider < opencode
+        assert_eq!(agents[0].name, "aider");
+        assert_eq!(agents[0].message_flag.as_deref(), Some("--msg"));
+        assert_eq!(agents[1].name, "opencode");
     }
 
     #[test]
@@ -635,9 +527,43 @@ agents:
         let agents = read_config(path.to_str().unwrap()).unwrap();
         std::fs::remove_file(&path).ok();
         assert_eq!(agents.len(), 1);
-        // When both driver and cmd are present, driver takes precedence through from_config()
         assert_eq!(agents[0].driver.as_deref(), Some("opencode"));
         assert_eq!(agents[0].cmd, "custom-bin");
         assert_eq!(agents[0].model_flag.as_deref(), Some("--model"));
+    }
+
+    #[test]
+    fn test_discover_echo_always_found() {
+        let result = discover();
+        let echo = result.agents.iter().find(|a| a.name == "echo").unwrap();
+        assert!(echo.found);
+        assert!(!echo.path.is_empty());
+    }
+
+    #[test]
+    fn test_discover_includes_all_catalog_agents() {
+        let result = discover();
+        let catalog = super::catalog::embedded_catalog();
+        for entry in &catalog {
+            let agent = result.agents.iter().find(|a| a.name == entry.name);
+            assert!(agent.is_some(), "agent '{}' from catalog not in discovery result", entry.name);
+        }
+    }
+
+    #[test]
+    fn test_read_config_with_yes_flag() {
+        let yaml = r#"agents:
+  codex:
+    type: local-cli
+    cmd: codex
+    args: ["run"]
+    yes_flag: --yolo
+"#;
+        let path = write_tmp_yaml(yaml);
+        let agents = read_config(path.to_str().unwrap()).unwrap();
+        std::fs::remove_file(&path).ok();
+        assert_eq!(agents.len(), 1);
+        assert_eq!(agents[0].name, "codex");
+        assert_eq!(agents[0].yes_flag.as_deref(), Some("--yolo"));
     }
 }

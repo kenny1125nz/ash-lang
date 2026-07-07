@@ -99,7 +99,7 @@ fn collect_agent_names<'a>(nodes: &'a [Node], names: &mut HashSet<&'a str>) {
     }
 }
 
-const DEFAULT_CONFIG_FILENAME: &str = "ash.yaml";
+const DEFAULT_CONFIG_FILENAME: &str = "ash.yml";
 
 fn global_config_dir() -> std::path::PathBuf {
     let home = std::env::var("HOME")
@@ -135,10 +135,7 @@ fn validate_agents(script: &Script, config_path: Option<&str>) -> Result<(), Str
         used_agents.insert(&shebang.engine);
     }
 
-    let builtin: HashSet<&str> = ["echo", "opencode", "claude-code", "aider"]
-        .iter()
-        .copied()
-        .collect();
+    let builtin: HashSet<&str> = ["echo"].iter().copied().collect();
 
     used_agents.retain(|name| !builtin.contains(name));
 

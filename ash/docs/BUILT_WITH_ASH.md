@@ -85,8 +85,8 @@ format fits each step.
 ### Agent discovery
 
 ```bash
-ash discover            # list installed agents
-ash discover --write    # generate ash-project.yaml
+ash discover            # list installed agents (parallel probe)
+ash discover --write    # generate ash.yml
 ```
 
 Nested folders create hierarchy. Prefixes enforce order. Duplicates are
