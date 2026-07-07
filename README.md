@@ -36,13 +36,13 @@ Or download a prebuilt binary from [GitHub Releases](https://github.com/kenny112
 Create `ash.yaml` in your project root:
 
 ```yaml
-default_agent: opencode:deepseek-v3
+default_agent: opencode
 ```
 
 Or set it per-run:
 
 ```bash
-ash --agent opencode:deepseek-v3 tasks/
+ash --agent opencode tasks/
 ```
 
 ### Run your first project
@@ -118,7 +118,7 @@ parallelism — write an `.ash` script:
 
 ```bash
 #!/usr/bin/env ash
-#! opencode:deepseek-v3
+#! opencode
 
 "Write a hello world program in Rust"
 ```
