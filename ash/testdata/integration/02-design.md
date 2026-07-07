@@ -1,10 +1,6 @@
----
-agent: echo
-model: gpt-4o
----
-
 # System Design
 
-Based on the requirements, design the system architecture. Define the module
-boundaries, data model, storage layer, and CLI interface. Document the
-key design decisions.
+Read `REQUIREMENTS.md` (written by the previous step) to
+understand what to build. Design the system architecture, split the work
+into Module A (core data model) and Module B (CLI layer), and write the
+design doc to `DESIGN.md`.

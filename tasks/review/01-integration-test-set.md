@@ -20,19 +20,31 @@ ash/testdata/integration/
 ├── 01-requirements.md          # Define project requirements
 ├── 02-design.md                # Design system architecture
 ├── 03-implementation/
+│   ├── 00-init-repo.ash        # Initialize git repo
+│   ├── init.md                 # Project scaffolding (per-language, not a task)
 │   ├── 01-module-a.md          # Implement module A
-│   ├── 02-module-b.ash         # Implement module B (scripted)
+│   ├── 02-module-b.md          # Implement module B (CLI layer)
 │   └── 03-integrate.md         # Integrate modules
 ├── 04-verify/
 │   ├── 01-unit-test.md         # Run unit tests
 │   └── 02-e2e-test.md          # Run end-to-end tests
-├── 05-deploy.ash               # Deploy to staging environment
-└── 06-release.md               # Release to production
+└── 05-deploy.ash               # Deploy — commit and tag a release
 ```
 
-The tasks operate on `ash/testdata/test-project/`, which contains an initial primitive idea from the user (e.g., a bare scaffold or rough sketch). The task tree simulates the full development cycle: starting from this raw concept, each step refines it until the final task delivers a workable piece of software.
+The target project is determined by the cwd when ash is invoked (e.g., `ash --cwd ash/testdata/test-project/ ../integration/`). The cwd holds an initial primitive idea from the user (e.g., a bare scaffold or rough sketch). The task tree simulates the full development cycle: starting from this raw concept, each step refines it until the final task delivers a workable piece of software.
 
-The modelled flow itself must be generic — it should not embed any knowledge of or assumptions about the specific idea inside `test-project/`. The tree defines a process (requirements → design → implementation → verify → deploy → release), not a solution to the idea. This keeps the test reusable: swap in a different `test-project/` and the same tree exercises the same workflow.
+The modelled flow itself must be generic — it should not embed any knowledge of or assumptions about the specific idea in the cwd. The tree defines a process (requirements → design → implementation → verify → deploy → release), not a solution to the idea. This keeps the test reusable: run the same tree against a different cwd and it exercises the same workflow.
+
+Each step hands off to the next by writing file(s) into the cwd (using relative paths). Each task references the output files of earlier steps as context. This creates a dependency chain where tasks are reminded of what was built before:
+
+| Step | Reads | Writes |
+|------|-------|--------|
+| 01-requirements.md | `ideas.txt` | `REQUIREMENTS.md` |
+| 02-design.md | `REQUIREMENTS.md` | `DESIGN.md` |
+| 03-implementation/00-init-repo.ash | `DESIGN.md` | git repo |
+| 03-implementation/01-* | `init.md`, `src/` (scaffold) | `src/*` |
+| 04-verify/* | `src/*` | `tests/*` |
+| 05-deploy.ash | `src/`, `tests/` | git tag `v1.0.0` |
 
 Each task runs against a configurable agent (e.g., opencode, claude-code, aider). The test harness invokes `ash ash/testdata/integration/` and validates the output against expected patterns.
 

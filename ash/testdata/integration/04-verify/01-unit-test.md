@@ -1,9 +1,5 @@
----
-agent: echo
----
-
 # Unit Tests
 
-Write and run unit tests for each module. Verify that the data layer
-correctly persists and retrieves tasks, and that the CLI parser handles
-all command variants without error.
+Read the source files in `src/` (output of the implementation
+steps). Write unit tests into `tests/` and run them to verify
+each module works correctly.

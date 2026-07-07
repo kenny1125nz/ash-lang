@@ -1,9 +1,4 @@
----
-agent: echo
----
-
 # Requirements Gathering
 
-Review the project idea in `test-project/ideas.txt` and define the functional
-requirements. Identify the core entities, operations, and constraints that
-will drive the design.
+Read `ideas.txt` to understand the project concept. Define
+the functional requirements and write them to `REQUIREMENTS.md`.

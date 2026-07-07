@@ -1,8 +1,5 @@
----
-agent: echo
----
-
 # End-to-End Test
 
-Run the full workflow: add tasks, list them, mark one complete, delete
-another, and filter by priority. Verify the output is correct at each step.
+Read the application entry point in `src/` and the tests
+in `tests/` (outputs of earlier steps). Run the full application
+workflow end-to-end and verify correct behaviour.
