@@ -1,6 +1,6 @@
 # Ash
 
-**Deterministic agent orchestration — structured files or script for advanced flows.**
+**Deterministic agent orchestration — structured task files, scriptable when you need more.**
 
 Point Ash at a directory — it walks the tree in sorted order and sends
 every `.md` file to your configured AI agent. One task per file.
