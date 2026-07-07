@@ -24,7 +24,8 @@ pub struct DiscoveryResult {
 }
 
 pub fn discover() -> DiscoveryResult {
-    let catalog = catalog::load_catalog();
+    eprintln!("discovering agents available...");
+    let catalog = catalog::embedded_catalog();
     let timestamp = chrono_now();
     let mut agents: Vec<DiscoveredAgent> = Vec::new();
 
@@ -93,7 +94,7 @@ pub fn discover() -> DiscoveryResult {
 
 /// Convert discovery results to a list of agent configs suitable for writing.
 pub fn discovered_to_configs(result: &DiscoveryResult) -> Vec<AgentConfig> {
-    let catalog = catalog::load_catalog();
+    let catalog = catalog::embedded_catalog();
     result
         .agents
         .iter()
@@ -104,7 +105,7 @@ pub fn discovered_to_configs(result: &DiscoveryResult) -> Vec<AgentConfig> {
 
 pub fn discover_and_register() -> DiscoveryResult {
     let result = discover();
-    let catalog = catalog::load_catalog();
+    let catalog = catalog::embedded_catalog();
 
     for entry in &catalog {
         let found = result.agents.iter().any(|a| a.name == entry.name && a.found);

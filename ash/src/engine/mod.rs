@@ -11,7 +11,7 @@ pub mod types;
 pub use adapter::{Adapter, LocalCliAdapter};
 pub use api::ApiAdapter;
 pub use browser::{BrowserAdapter, BrowserFallback};
-pub use catalog::{embedded_catalog, fetch_catalog, load_catalog, CATALOG_URL};
+pub use catalog::{embedded_catalog, load_catalog};
 pub use config::{AgentConfig, ApiEndpoint, AuthConfig, ContainerConfig};
 pub use container::ContainerAdapter;
 pub use discovery::{discover, discover_and_register, discovered_to_configs, discovery_summary, print_discovery, DiscoveryResult};
@@ -64,6 +64,16 @@ pub fn register_defaults() {
         "echo",
         Arc::new(LocalCliAdapter::new("echo", Arc::new(EchoDriver))),
     );
+}
+
+/// Print a startup banner showing registered agents and a hint to the website.
+pub fn print_agents_banner() {
+    let reg = registry().lock().unwrap();
+    let names: Vec<String> = reg.keys().map(|k| k.to_string()).collect();
+    if !names.is_empty() {
+        eprintln!("agents available: {}", names.join(", "));
+    }
+    eprintln!("For supported agents and config docs, visit https://ash-lang.com");
 }
 
 #[cfg(test)]

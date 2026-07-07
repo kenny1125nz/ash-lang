@@ -7,12 +7,10 @@ edition = "2021"
 regex = "1"
 log = { version = "0.4", features = ["std"] }
 rustyline = { version = "14", optional = true }
-ureq = { version = "3", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
 
 [features]
-default = ["repl", "online-catalog"]
+default = ["repl"]
 repl = ["rustyline"]
-online-catalog = ["ureq"]

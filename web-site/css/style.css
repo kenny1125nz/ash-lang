@@ -252,6 +252,41 @@ td:first-child { color: var(--text); font-family: var(--font-mono); font-size: 1
   text-align: right;
 }
 
+/* Site footer */
+.site-footer {
+  padding: 24px 0;
+  border-top: 1px solid var(--border);
+  text-align: center;
+  color: var(--text2);
+  font-size: 13px;
+}
+
+/* Compact hero for sub-pages */
+.hero-sm {
+  padding: 60px 0 48px;
+}
+
+/* Section without border */
+.section-plain {
+  padding: 0 0 64px;
+  border-bottom: none;
+}
+
+/* Muted footnote text */
+.text-footnote {
+  color: var(--text2);
+  font-size: 14px;
+  margin-top: 32px;
+}
+
+/* Spacing helpers */
+.mt-16 { margin-top: 16px; }
+.mt-24 { margin-top: 24px; }
+.mt-32 { margin-top: 32px; }
+.mt-48 { margin-top: 48px; }
+.mb-16 { margin-bottom: 16px; }
+.mb-24 { margin-bottom: 24px; }
+
 /* Terminal animation */
 .terminal {
   background: var(--bg);

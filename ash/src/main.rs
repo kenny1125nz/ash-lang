@@ -245,6 +245,7 @@ fn ensure_agents_registered(config_path: Option<&str>) {
                     if let Some(tc) = telemetry_config {
                         init_telemetry(tc);
                     }
+                    engine::print_agents_banner();
                     return;
                 }
                 Err(e) => eprintln!("warning: failed to read config: {}", e),
@@ -263,6 +264,7 @@ fn ensure_agents_registered(config_path: Option<&str>) {
     let result = engine::discover_and_register();
     let summary = engine::discovery_summary(&result);
     eprintln!("{}", summary);
+    engine::print_agents_banner();
 
     let dir = global_config_dir();
     if let Err(e) = std::fs::create_dir_all(&dir) {

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Supported Agents — Ash</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <header>
+    <div class="container">
+      <div class="logo"><span>ash</span></div>
+      <nav>
+        <a href="index.html">Home</a>
+        <a href="index.html#getting-started">Getting Started</a>
+        <a href="index.html#how-it-works">How it works</a>
+        <a href="index.html#playground">Playground</a>
+        <a href="agents.html">Agents</a>
+        <a href="https://github.com/kenny1125nz/ash-lang" target="_blank">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero hero-sm">
+    <div class="container">
+      <h1>Supported <span>Agents</span></h1>
+      <p>Ash has built-in support for these AI coding agents. Each agent can be configured via <code>ash.yml</code> with the default settings below.</p>
+    </div>
+  </section>
+
+  <section class="section-plain">
+    <div class="container">
+
+      <h2 class="section-title">Default Configurations</h2>
+      <p class="section-desc">Run <code>ash discover</code> to auto-detect installed agents, or configure them manually in <code>ash.yml</code>.</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Agent</th>
+            <th>Binary</th>
+            <th>Args</th>
+            <th>Model Flag</th>
+            <th>Session Flag</th>
+            <th>Message Flag</th>
+            <th>Yes Flag</th>
+            <th>Install</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>opencode</td>
+            <td>opencode</td>
+            <td>run</td>
+            <td>--model</td>
+            <td>--continue</td>
+            <td></td>
+            <td></td>
+            <td>npm i -g @anomalyco/opencode</td>
+          </tr>
+          <tr>
+            <td>claude-code</td>
+            <td>claude</td>
+            <td></td>
+            <td>--model</td>
+            <td>--continue</td>
+            <td>--msg</td>
+            <td></td>
+            <td>npm i -g @anthropic-ai/claude-code</td>
+          </tr>
+          <tr>
+            <td>aider</td>
+            <td>aider</td>
+            <td></td>
+            <td>--model</td>
+            <td>--restore-chat-history</td>
+            <td>--msg</td>
+            <td>--yes</td>
+            <td>pip install aider-chat</td>
+          </tr>
+          <tr>
+            <td>codex</td>
+            <td>codex</td>
+            <td>run</td>
+            <td>--model</td>
+            <td></td>
+            <td></td>
+            <td>--yolo</td>
+            <td>npm i -g @openai/codex</td>
+          </tr>
+          <tr>
+            <td>gemini-cli</td>
+            <td>gemini</td>
+            <td>-p</td>
+            <td>--model</td>
+            <td>--continue</td>
+            <td></td>
+            <td></td>
+            <td>npm i -g @google/gemini-cli</td>
+          </tr>
+          <tr>
+            <td>kimi</td>
+            <td>kimi</td>
+            <td></td>
+            <td>--model</td>
+            <td>--continue</td>
+            <td>-p</td>
+            <td>--yolo</td>
+            <td>curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash</td>
+          </tr>
+          <tr>
+            <td>pi</td>
+            <td>pi</td>
+            <td></td>
+            <td>--model</td>
+            <td></td>
+            <td>-p</td>
+            <td></td>
+            <td>npm i -g @picoglobal/pi</td>
+          </tr>
+          <tr>
+            <td>goose</td>
+            <td>goose</td>
+            <td>run</td>
+            <td>--model</td>
+            <td></td>
+            <td></td>
+            <td>-y</td>
+            <td>brew install goose</td>
+          </tr>
+          <tr>
+            <td>qwen-code</td>
+            <td>qwen</td>
+            <td>run</td>
+            <td>--model</td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td>pip install qwen-code</td>
+          </tr>
+          <tr>
+            <td>amazon-q</td>
+            <td>q</td>
+            <td></td>
+            <td>--model</td>
+            <td></td>
+            <td>-p</td>
+            <td></td>
+            <td>npm i -g @aws/q</td>
+          </tr>
+          <tr>
+            <td>echo</td>
+            <td>echo</td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td>Built-in (always available)</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2 class="section-title mt-48">Custom Agents</h2>
+      <p class="section-desc">Any CLI-based agent can be configured manually via <code>ash.yml</code>. Here is an example:</p>
+      <pre><code>agents:
+  my-tool:
+    type: local-cli
+    cmd: my-tool
+    args: ["run"]
+    model_flag: "--model"
+    session_flag: "--continue"
+    message_flag: "--msg"
+    stdin_prompt: false
+    yes_flag: "--yes"</code></pre>
+
+      <p class="text-footnote">See the <a href="https://github.com/kenny1125nz/ash-lang">GitHub repository</a> for full documentation.</p>
+
+    </div>
+  </section>
+
+  <footer class="site-footer">
+    <div class="container">
+      Ash — Open Source Task Runner for AI Agents &middot; <a href="https://github.com/kenny1125nz/ash-lang">GitHub</a>
+    </div>
+  </footer>
+
+</body>
+</html>

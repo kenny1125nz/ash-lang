@@ -1,14 +1,8 @@
-/// Agent catalog — the source of truth for known agent definitions.
-///
-/// The canonical catalog lives at `CATALOG_URL` (`web-site/agents.json`).
-/// During discovery, ash attempts to fetch the remote catalog and falls
-/// back to the copy embedded at compile time.
+/// Agent catalog — embedded source of truth for known agent definitions.
 use serde::Deserialize;
 
 use crate::engine::config::{AgentConfig, ApiEndpoint, ContainerConfig};
 use crate::engine::types::AgentType;
-
-pub const CATALOG_URL: &str = "https://ash.opencode.ai/agents.json";
 
 /// Raw JSON entry from the catalog — maps directly to the JSON format.
 #[derive(Debug, Clone, Deserialize)]
@@ -95,35 +89,6 @@ fn parse_catalog_json(json: &str) -> Result<Vec<AgentEntry>, String> {
             install_hint: e.install_hint,
         })
         .collect())
-}
-
-/// Fetch the agent catalog from the remote URL.
-///
-/// Uses the `online-catalog` feature (requires `ureq`). When the feature
-/// is disabled or the fetch fails, returns `None`.
-#[cfg(feature = "online-catalog")]
-pub fn fetch_catalog(url: &str) -> Option<Vec<AgentEntry>> {
-    let agent = ureq::Agent::new_with_defaults();
-    let response = match agent
-        .get(url)
-        .header("User-Agent", "ash-agent-catalog/0.1")
-        .call()
-    {
-        Ok(r) => r,
-        Err(_) => return None,
-    };
-    let body = match response.into_body().read_to_vec() {
-        Ok(b) => b,
-        Err(_) => return None,
-    };
-    let text = String::from_utf8(body).ok()?;
-    parse_catalog_json(&text).ok()
-}
-
-/// When the `online-catalog` feature is disabled, fetching always returns `None`.
-#[cfg(not(feature = "online-catalog"))]
-pub fn fetch_catalog(_url: &str) -> Option<Vec<AgentEntry>> {
-    None
 }
 
 /// Hardcoded fallback catalog — always available, no filesystem or network needed.
@@ -220,22 +185,15 @@ fn hardcoded_catalog() -> Vec<AgentEntry> {
 /// Return the embedded catalog (compiled into the binary).
 /// Falls back to hardcoded Rust constants if the embedded JSON fails to parse.
 pub fn embedded_catalog() -> Vec<AgentEntry> {
-    let json = include_str!("../../../web-site/agents.json");
+    let json = include_str!("./agents.json");
     match parse_catalog_json(json) {
         Ok(entries) if !entries.is_empty() => entries,
         _ => hardcoded_catalog(),
     }
 }
 
-/// Try remote, then embedded JSON, then hardcoded Rust constants.
+/// Load the agent catalog from the embedded JSON source.
 pub fn load_catalog() -> Vec<AgentEntry> {
-    #[cfg(feature = "online-catalog")]
-    {
-        match fetch_catalog(CATALOG_URL) {
-            Some(entries) if !entries.is_empty() => return entries,
-            _ => {}
-        }
-    }
     embedded_catalog()
 }
 
