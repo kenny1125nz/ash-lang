@@ -243,8 +243,9 @@ print "Completed ${len(TASKS)} tasks"
         var observer = new IntersectionObserver(function(entries) {
           entries.forEach(function(entry) {
             if (entry.isIntersecting) {
+              terminal.classList.remove('visible');
+              void terminal.offsetWidth;
               terminal.classList.add('visible');
-              observer.unobserve(terminal);
             }
           });
         }, { threshold: 0.3 });
