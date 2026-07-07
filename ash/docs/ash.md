@@ -1,6 +1,6 @@
 # Ash — Quick Start
 
-**Version:** 0.2.0   **File Extension:** `.ash`
+**Version:** 0.2.1   **File Extension:** `.ash`
 
 Ash is a scripting language for composing AI coding agents into automated workflows. You tell agents what to do, and ash orchestrates their execution.
 
