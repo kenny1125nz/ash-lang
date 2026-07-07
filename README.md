@@ -84,13 +84,18 @@ ash --dry-run tasks/
 
 ## Writing Tasks
 
-Each `.md` file is a standalone prompt sent to the agent. The filename
-sets the order — Ash sorts alphanumerically. Subdirectories group
-related tasks.
+Each `.md` file is a standalone prompt sent to the agent. Optional
+YAML frontmatter sets per-task config (agent, model, etc.). The
+filename sets the order — Ash sorts alphanumerically. Subdirectories
+group related tasks.
 
 **tasks/1-plan/01-requirements.md:**
 
 ```markdown
+---
+agent: opencode
+---
+
 Write a requirements document for a login system that supports:
 
 - Email/password authentication
@@ -102,6 +107,10 @@ Write a requirements document for a login system that supports:
 **tasks/2-implement/01-auth.md:**
 
 ```markdown
+---
+agent: claude-code
+---
+
 Implement the login API endpoint. Cover:
 
 - POST /auth/login — validates email/password, returns JWT
