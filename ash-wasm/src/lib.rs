@@ -156,6 +156,7 @@ pub fn repl_init() {
     ash::engine::register("js-echo", browser_adapter);
 
     let mut eval = Evaluator::new();
+    eval.set_default_agent("js-echo");
     let out_buf: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
     eval.stdout = captured_writer(out_buf);
     *repl_eval_state().lock().unwrap() = Some(eval);
@@ -185,6 +186,13 @@ pub fn repl_eval(line: &str) -> String {
 
     let out_buf: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
     let saved = std::mem::replace(&mut eval.stdout, captured_writer(out_buf.clone()));
+
+    if let Some(ref shebang) = script.shebang {
+        eval.set_default_agent(&shebang.engine);
+        if !shebang.model.is_empty() {
+            eval.set_default_model(&shebang.model);
+        }
+    }
 
     for stmt in &script.body {
         match eval.eval_statement(stmt) {
@@ -244,6 +252,7 @@ fn is_repl_expr_node(node: &ash::ast::Node) -> bool {
     matches!(
         node,
         Node::VarAssign(_)
+            | Node::AgentCall(_)
             | Node::BinaryExpr(_)
             | Node::UnaryExpr(_)
             | Node::VarRef(_)
