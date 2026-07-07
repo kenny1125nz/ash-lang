@@ -125,15 +125,14 @@ Use the requirements from tasks/1-plan/01-requirements.md.
 When you need more than one-shot prompts — chaining, conditionals,
 parallelism — write an `.ash` script:
 
-```bash
-#!/usr/bin/env ash
-#! opencode
-
-"Write a hello world program in Rust"
+```ash
+#!opencode
+do "Write a hello world program in Rust"
+print stdout
 ```
 
 ```bash
-ash run hello.ash
+ash hello.ash
 ```
 
 ### REPL
