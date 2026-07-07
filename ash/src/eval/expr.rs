@@ -3,9 +3,9 @@ use std::fs;
 use log::debug;
 use regex::Regex;
 
-use crate::ast::*;
-use crate::interpolation::Interpolation;
-use crate::value::Value;
+use crate::lang::ast::*;
+use crate::runtime::interpolation::Interpolation;
+use crate::runtime::value::Value;
 
 use super::{EvalError, Evaluator, SignalKind};
 
@@ -196,7 +196,7 @@ impl Evaluator {
             if !result.contains(&placeholder) {
                 continue;
             }
-            if let Ok(expr) = crate::parser::parse_expr_str(&expr_str) {
+            if let Ok(expr) = crate::lang::parser::parse_expr_str(&expr_str) {
                 if let Ok(val) = self.eval_expr(&expr) {
                     result = result.replace(&placeholder, &format!("{}", val));
                 }

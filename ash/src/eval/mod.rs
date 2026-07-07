@@ -11,11 +11,12 @@ use std::thread;
 
 use log::{debug, info, trace};
 
-use crate::ast::*;
-use crate::compact::Config as CompactConfig;
-use crate::executor::Executor;
-use crate::scope::{Scope, ScopeRef};
-use crate::value::Value;
+use crate::lang::ast::*;
+use crate::runtime::compact::Config as CompactConfig;
+use crate::runtime::executor::Executor;
+use crate::runtime::scope::{Scope, ScopeRef};
+use crate::runtime::value::Value;
+use crate::telemetry;
 
 const DEFAULT_AGENT: &str = "echo";
 
@@ -85,6 +86,7 @@ pub struct Evaluator {
     pub default_model: String,
     pub session_depth: usize,
     pub within_stack: Vec<PathBuf>,
+    pub telemetry_ctx: Option<telemetry::context::SpanContext>,
 }
 
 impl Evaluator {
@@ -103,6 +105,7 @@ impl Evaluator {
             default_model: String::new(),
             session_depth: 0,
             within_stack: Vec::new(),
+            telemetry_ctx: None,
         }
     }
 
@@ -118,7 +121,41 @@ impl Evaluator {
 
     pub fn eval_script(&mut self, script: &Script) -> Result<(), EvalError> {
         info!("engine — evaluating script ({} statements)", script.body.len());
-        self.eval_statements(&script.body)
+
+        if self.telemetry_ctx.is_none() && telemetry::is_enabled() {
+            self.telemetry_ctx = Some(telemetry::context::SpanContext::root());
+        }
+
+        if let Some(ref ctx) = self.telemetry_ctx {
+            telemetry::emit(
+                ctx.clone(),
+                telemetry::event::EventKind::SessionStart,
+                serde_json::json!({"script_len": script.body.len()}),
+            );
+        }
+
+        let start = std::time::Instant::now();
+        let result = self.eval_statements(&script.body);
+        let duration_ms = start.elapsed().as_millis() as u64;
+
+        if let Some(ref ctx) = self.telemetry_ctx {
+            let exit_code = self.get_var("?").unwrap_or(crate::runtime::value::Value::Int(0));
+            let code = match exit_code {
+                crate::runtime::value::Value::Int(i) => i,
+                _ => 0,
+            };
+            telemetry::emit(
+                ctx.clone(),
+                telemetry::event::EventKind::SessionEnd,
+                serde_json::json!({
+                    "duration_ms": duration_ms,
+                    "exit_code": code,
+                    "ok": result.is_ok(),
+                }),
+            );
+        }
+
+        result
     }
 
     pub fn eval_statements(&mut self, stmts: &[Node]) -> Result<(), EvalError> {
@@ -201,7 +238,31 @@ impl Evaluator {
             Value::String(s) => s.clone(),
             other => format!("{}", other),
         };
+
+        let child_ctx = self.telemetry_ctx.as_ref().map(|c| c.child());
+        if let Some(ref ctx) = child_ctx {
+            telemetry::emit(
+                ctx.clone(),
+                telemetry::event::EventKind::CommandExec,
+                serde_json::json!({"cmd": cmd_str}),
+            );
+        }
+        let start = std::time::Instant::now();
         let result = self.executor.run(&cmd_str)?;
+        let duration_ms = start.elapsed().as_millis() as u64;
+        if let Some(ref ctx) = child_ctx {
+            telemetry::emit(
+                ctx.clone(),
+                telemetry::event::EventKind::CommandExec,
+                serde_json::json!({
+                    "cmd": cmd_str,
+                    "duration_ms": duration_ms,
+                    "exit_code": result.exit_code,
+                    "stdout_len": result.stdout.len(),
+                    "stderr_len": result.stderr.len(),
+                }),
+            );
+        }
         {
             let mut scope = self.current_scope.lock().unwrap();
             scope.set_local("?", Value::Int(result.exit_code as i64));
@@ -380,7 +441,7 @@ impl Evaluator {
         let src = fs::read_to_string(&path)
             .map_err(|e| EvalError::Msg(format!("include: failed to read '{}': {}", path, e)))?;
 
-        let script = crate::parser::parse_str(&src)
+        let script = crate::lang::parser::parse_str(&src)
             .map_err(|e| EvalError::Msg(format!("include: parse error: {}", e)))?;
 
         for stmt in script.body {
@@ -423,7 +484,7 @@ impl Evaluator {
         let arg_val = self.eval_expr(&n.arg)?;
         let arg_str = format!("{}", arg_val);
 
-        if let Ok(d) = crate::compact::Directive::parse(&arg_str) {
+        if let Ok(d) = crate::runtime::compact::Directive::parse(&arg_str) {
             d.apply(&mut self.compact_config);
         }
 
@@ -505,7 +566,7 @@ mod tests {
 
     use std::io::Write;
 
-    use crate::ast::{
+    use crate::lang::ast::{
         ArrayLiteral, Background, BinaryExpr, BinaryTry, BoolLiteral, Break, CompactStmt, Continue,
         DirBlock, ElseIf, Env, EvalTry, Exit, FnCall, FnDecl, ForStmt, IfStmt, Include,
         IntLiteral, Pos, Print, Return, StringLiteral, UnaryExpr, VarAssign, VarRef, WaitBlock,

@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use crate::ast::FnDecl;
-use crate::value::Value;
+use crate::lang::ast::FnDecl;
+use crate::runtime::value::Value;
 
 pub type ScopeRef = Arc<Mutex<Scope>>;
 
@@ -69,7 +69,7 @@ impl Scope {
         self.variables.contains_key(name)
     }
 
-    pub fn get_all(&self) -> std::collections::HashMap<String, crate::value::Value> {
+    pub fn get_all(&self) -> std::collections::HashMap<String, crate::runtime::value::Value> {
         self.variables.clone()
     }
 

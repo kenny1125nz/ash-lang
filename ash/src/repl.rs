@@ -3,13 +3,13 @@ use std::io::{self, BufRead, IsTerminal, Write};
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 
-use crate::ast::Node;
+use crate::lang::ast::Node;
 use crate::eval::{EvalError, Evaluator};
-use crate::lexer;
-use crate::parser::parse_str;
-use crate::scope::Scope;
-use crate::token::TokenKind;
-use crate::value::Value;
+use crate::lang::lexer;
+use crate::lang::parser::parse_str;
+use crate::runtime::scope::Scope;
+use crate::lang::token::TokenKind;
+use crate::runtime::value::Value;
 
 pub fn is_tty() -> bool {
     io::stdin().is_terminal()

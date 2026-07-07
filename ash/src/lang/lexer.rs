@@ -1,4 +1,4 @@
-use crate::token::{Token, TokenKind};
+use crate::lang::token::{Token, TokenKind};
 use regex::Regex;
 
 pub struct Lexer {
@@ -565,7 +565,7 @@ pub fn parse_compact_line(line: &str) -> Option<CompactConfigResult> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::token::TokenKind;
+    use crate::lang::token::TokenKind;
 
     fn lex_str(src: &str) -> Vec<Token> {
         tokenize(src).unwrap()

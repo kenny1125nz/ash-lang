@@ -1,5 +1,5 @@
-use crate::ast::{InterpSpan, InterpType};
-use crate::value::Value;
+use crate::lang::ast::{InterpSpan, InterpType};
+use crate::runtime::value::Value;
 use regex::Regex;
 
 pub struct Interpolation;
@@ -141,7 +141,7 @@ mod tests {
 
     #[test]
     fn test_resolve_spans() {
-        use crate::ast::Pos;
+        use crate::lang::ast::Pos;
         let interps = vec![
             InterpSpan {
                 pos: Pos { line: 1, col: 1 },
@@ -160,7 +160,7 @@ mod tests {
 
     #[test]
     fn test_resolve_spans_undefined() {
-        use crate::ast::Pos;
+        use crate::lang::ast::Pos;
         let interps = vec![
             InterpSpan {
                 pos: Pos { line: 1, col: 1 },

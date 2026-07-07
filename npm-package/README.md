@@ -12,6 +12,12 @@ On `npm install`, the correct platform binary is downloaded from GitHub Releases
 
 ## Usage
 
+Replace `opencode` with the agent you have installed — opencode, claude-code, codex, gemini-cli, or kimi (echo is the built-in default when none is found, and these are the agents with built-in support):
+
+```sh
+ash --agent opencode ./tasks
+```
+
 Point Ash at a directory of numbered markdown tasks:
 
 ```
@@ -40,6 +46,26 @@ Or via `npx`:
 
 ```sh
 npx @ash-lang/cli ./tasks
+```
+
+For `.ash` scripts, declare the agent with a shebang:
+
+```ash
+#!opencode:1.0
+
+do "Review src/" with opencode
+```
+
+For `.md` tasks, set the agent in YAML frontmatter:
+
+```markdown
+---
+agent: opencode
+---
+
+# Task Title
+
+The prompt content goes here...
 ```
 
 ## Language

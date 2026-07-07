@@ -1,11 +1,11 @@
 use std::collections::HashSet;
 use std::io::Read;
 
-use ash::ast::{Node, Script};
 use ash::engine;
 use ash::eval::{EvalError, Evaluator};
-use ash::parser::parse_str;
-use ash::tree::{self, WalkConfig};
+use ash::lang::ast::{Node, Script};
+use ash::lang::parser::parse_str;
+use ash::runtime::tree::{self, WalkConfig};
 
 use log::info;
 
@@ -157,8 +157,8 @@ fn validate_agents(script: &Script, config_path: Option<&str>) -> Result<(), Str
         }
     };
 
-    let configured = match engine::read_config(&config_path_str) {
-        Ok(agents) => agents.into_iter().map(|a| a.name).collect::<HashSet<_>>(),
+    let configured = match ash::config::read_config(&config_path_str) {
+        Ok((agents, _)) => agents.into_iter().map(|a| a.name).collect::<HashSet<_>>(),
         Err(e) => {
             return Err(format!("failed to read {}: {}", config_path_str, e));
         }
@@ -215,7 +215,8 @@ fn cmd_discover(args: &[String]) -> i32 {
     let result = engine::discover();
 
     if write {
-        match engine::write_config(DEFAULT_CONFIG_FILENAME, &result, force) {
+        let agents = engine::discovered_to_configs(&result);
+        match ash::config::write_config(DEFAULT_CONFIG_FILENAME, &agents, None, force) {
             Ok(()) => println!("Generated {}", DEFAULT_CONFIG_FILENAME),
             Err(e) => {
                 eprintln!("error: {}", e);
@@ -235,11 +236,14 @@ fn ensure_agents_registered(config_path: Option<&str>) {
 
     if let Some(ref path) = resolved {
         if path.exists() {
-            match engine::read_config(path.to_str().unwrap()) {
-                Ok(agents) => {
+            match ash::config::read_config(path.to_str().unwrap()) {
+                Ok((agents, telemetry_config)) => {
                     for config in agents {
                         let adapter = engine::from_config(&config);
                         engine::register(&config.name, adapter);
+                    }
+                    if let Some(tc) = telemetry_config {
+                        init_telemetry(tc);
                     }
                     return;
                 }
@@ -266,8 +270,18 @@ fn ensure_agents_registered(config_path: Option<&str>) {
         return;
     }
     let path = dir.join(DEFAULT_CONFIG_FILENAME);
-    if let Err(e) = engine::write_config(path.to_str().unwrap(), &result, false) {
+    let discovered_agents = engine::discovered_to_configs(&result);
+    if let Err(e) = ash::config::write_config(path.to_str().unwrap(), &discovered_agents, None, false) {
         eprintln!("warning: failed to save config: {}", e);
+    }
+}
+
+fn init_telemetry(config: ash::telemetry::config::TelemetryConfig) {
+    if config.file.is_none() {
+        return;
+    }
+    if let Err(e) = ash::telemetry::init(config) {
+        eprintln!("warning: failed to init telemetry: {}", e);
     }
 }
 
@@ -279,7 +293,9 @@ fn run() -> i32 {
 
     if args.len() > 1 && args[1] == "discover" {
         info!("engine — discover command");
-        return cmd_discover(&args[2..]);
+        let code = cmd_discover(&args[2..]);
+        ash::telemetry::shutdown();
+        return code;
     }
 
     let mut check_only = false;
@@ -319,42 +335,23 @@ fn run() -> i32 {
         if path.is_dir() {
             ensure_agents_registered(config_override.as_deref());
             let mut eval = Evaluator::new();
-            return tree::run_tree(WalkConfig {
+            let code = tree::run_tree(WalkConfig {
                 root: path.to_path_buf(),
                 dry_run: dry_run || check_only,
                 continue_on_error,
                 default_agent,
                 default_model,
             }, &mut eval);
+            ash::telemetry::shutdown();
+            return code;
         }
     }
 
-    let src = if !positional.is_empty() {
-        match std::fs::read_to_string(&positional[0]) {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("error reading {}: {}", positional[0], e);
-                return 1;
-            }
-        }
-    } else {
-        #[cfg(feature = "repl")]
-        if ash::repl::is_tty() {
-            ensure_agents_registered(config_override.as_deref());
-            let mut eval = Evaluator::new();
-            eval.set_default_agent(&default_agent);
-            if !default_model.is_empty() {
-                eval.set_default_model(&default_model);
-            }
-            return ash::repl::run_repl(&mut eval);
-        }
-        let mut input = String::new();
-        match std::io::stdin().read_to_string(&mut input) {
-            Ok(_) => input,
-            Err(e) => {
-                eprintln!("error reading stdin: {}", e);
-                return 1;
-            }
+    let src = match get_input(&positional, config_override.as_deref(), &default_agent, &default_model) {
+        Some(s) => s,
+        None => {
+            ash::telemetry::shutdown();
+            return 1;
         }
     };
 
@@ -362,17 +359,20 @@ fn run() -> i32 {
         Ok(s) => s,
         Err(e) => {
             eprintln!("parse error: {}", e);
+            ash::telemetry::shutdown();
             return 1;
         }
     };
 
     if let Err(e) = validate_agents(&script, config_override.as_deref()) {
         eprintln!("error: {}", e);
+        ash::telemetry::shutdown();
         return 1;
     }
 
     if check_only {
         println!("OK");
+        ash::telemetry::shutdown();
         return 0;
     }
 
@@ -386,12 +386,49 @@ fn run() -> i32 {
         }
     }
 
-    match eval.eval_script(&script) {
+    let exit_code = match eval.eval_script(&script) {
         Ok(()) => 0,
         Err(EvalError::Exit(ex)) => ex.code,
         Err(EvalError::Msg(e)) => {
             eprintln!("eval error: {}", e);
             3
+        }
+    };
+
+    ash::telemetry::shutdown();
+    exit_code
+}
+
+fn get_input(positional: &[String], config_override: Option<&str>, default_agent: &str, default_model: &str) -> Option<String> {
+    if !positional.is_empty() {
+        match std::fs::read_to_string(&positional[0]) {
+            Ok(s) => return Some(s),
+            Err(e) => {
+                eprintln!("error reading {}: {}", positional[0], e);
+                return None;
+            }
+        }
+    }
+
+    #[cfg(feature = "repl")]
+    if ash::repl::is_tty() {
+        ensure_agents_registered(config_override);
+        let mut eval = Evaluator::new();
+        eval.set_default_agent(default_agent);
+        if !default_model.is_empty() {
+            eval.set_default_model(default_model);
+        }
+        let code = ash::repl::run_repl(&mut eval);
+        ash::telemetry::shutdown();
+        std::process::exit(code);
+    }
+
+    let mut input = String::new();
+    match std::io::stdin().read_to_string(&mut input) {
+        Ok(_) => Some(input),
+        Err(e) => {
+            eprintln!("error reading stdin: {}", e);
+            None
         }
     }
 }

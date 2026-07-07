@@ -14,7 +14,7 @@ pub use browser::{BrowserAdapter, BrowserFallback};
 pub use catalog::{embedded_catalog, fetch_catalog, load_catalog, CATALOG_URL};
 pub use config::{AgentConfig, ApiEndpoint, AuthConfig, ContainerConfig};
 pub use container::ContainerAdapter;
-pub use discovery::{discover, discover_and_register, discovery_summary, generate_yaml, print_discovery, read_config, write_config, DiscoveryResult};
+pub use discovery::{discover, discover_and_register, discovered_to_configs, discovery_summary, print_discovery, DiscoveryResult};
 pub use driver::{AiderDriver, ClaudeDriver, CommandSpec, EchoDriver, GenericDriver, LocalCliDriver, OpenCodeDriver};
 pub use types::{AgentType, ExecuteRequest, ExecuteResponse};
 

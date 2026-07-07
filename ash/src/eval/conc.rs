@@ -1,9 +1,9 @@
 use std::sync::Arc;
 use std::thread;
 
-use crate::ast::*;
-use crate::compact::Config as CompactConfig;
-use crate::executor::Executor;
+use crate::lang::ast::*;
+use crate::runtime::compact::Config as CompactConfig;
+use crate::runtime::executor::Executor;
 
 use super::Evaluator;
 
@@ -31,6 +31,7 @@ impl Evaluator {
                             default_model: String::new(),
                             session_depth: 0,
                             within_stack: Vec::new(),
+                            telemetry_ctx: None,
                         };
                         eval.push_scope();
                         let _ = eval.eval_statement(&stmt_clone);
@@ -70,6 +71,7 @@ impl Evaluator {
                 default_model: String::new(),
                 session_depth: 0,
                 within_stack: Vec::new(),
+                telemetry_ctx: None,
             };
             eval.push_scope();
             let _ = eval.eval_statement(&stmt);
@@ -82,7 +84,7 @@ impl Evaluator {
 #[cfg(test)]
 mod tests {
     use super::super::*;
-    use crate::ast::*;
+    use crate::lang::ast::*;
 
     fn background_stmt_node(inner: Node) -> Node {
         Node::Background(Background {

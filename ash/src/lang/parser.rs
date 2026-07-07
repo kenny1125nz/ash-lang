@@ -1,6 +1,6 @@
-use crate::ast::*;
-use crate::lexer::{self, parse_compact_line, parse_shebang};
-use crate::token::{Token, TokenKind};
+use crate::lang::ast::*;
+use crate::lang::lexer::{self, parse_compact_line, parse_shebang};
+use crate::lang::token::{Token, TokenKind};
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -1381,7 +1381,7 @@ mod tests {
             "try { } upto",
         ];
         for src in &cases {
-            let tokens = crate::lexer::tokenize(src).unwrap();
+            let tokens = crate::lang::lexer::tokenize(src).unwrap();
             let result = parse(tokens);
             assert!(result.is_err(), "expected parse error for {:?}", src);
         }

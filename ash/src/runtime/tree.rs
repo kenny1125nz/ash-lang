@@ -5,8 +5,8 @@ use log::{debug, info, warn};
 
 use crate::engine::{self, ExecuteRequest, ExecuteResponse};
 use crate::eval::{EvalError, Evaluator};
-use crate::interpolation::Interpolation;
-use crate::parser::parse_str;
+use crate::runtime::interpolation::Interpolation;
+use crate::lang::parser::parse_str;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TaskKind {
@@ -136,7 +136,7 @@ fn parse_frontmatter_lines(block: &str) -> Frontmatter {
 
 fn parse_ash_shebang(content: &str) -> (Option<String>, Option<String>) {
     let first_line = content.lines().next().unwrap_or("");
-    match crate::lexer::parse_shebang(first_line) {
+    match crate::lang::lexer::parse_shebang(first_line) {
         Ok(sh) => {
             let agent = Some(sh.engine);
             let model = if sh.model.is_empty() { None } else { Some(sh.model) };
@@ -530,7 +530,7 @@ fn interpolate_prompt(prompt: &str, eval: &Evaluator) -> String {
                 .get(name)
                 .map(|v| format!("{}", v))
         },
-        move |cmd| crate::executor::Executor::new().run(cmd).map(|r| r.stdout),
+        move |cmd| crate::runtime::executor::Executor::new().run(cmd).map(|r| r.stdout),
     )
     .unwrap_or_else(|_| prompt.to_string())
 }

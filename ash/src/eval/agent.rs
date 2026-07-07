@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use log::{debug, info};
 
-use crate::ast::*;
-use crate::value::Value;
+use crate::lang::ast::*;
+use crate::runtime::value::Value;
+use crate::telemetry;
 
 use super::{EvalError, Evaluator, ExitError};
 
@@ -52,16 +53,36 @@ impl Evaluator {
         let agent_name = n
             .agent
             .as_deref()
-            .unwrap_or(&self.default_agent);
+            .unwrap_or(&self.default_agent)
+            .to_string();
 
         info!("agent — calling {} with agent {}", agent_name, agent_name);
         debug!("agent — prompt: {} chars", prompt_str.len());
 
-        let eng = crate::engine::get(agent_name);
+        let child_ctx = self.telemetry_ctx.as_ref().map(|c| c.child());
+        if let Some(ref ctx) = child_ctx {
+            let mut payload = serde_json::json!({
+                "agent": agent_name,
+                "model": model_str,
+                "request_len": prompt_str.len(),
+            });
+            if telemetry::capture_payload() {
+                let obj = payload.as_object_mut().unwrap();
+                obj.insert("request".to_string(), serde_json::Value::String(prompt_str.clone()));
+            }
+            telemetry::emit(
+                ctx.clone(),
+                telemetry::event::EventKind::AgentCall,
+                payload,
+            );
+        }
+
+        let start = std::time::Instant::now();
+        let eng = crate::engine::get(&agent_name);
         let result = if let Some(eng) = eng {
             eng.execute(&req)
         } else {
-            let mut cmd = std::process::Command::new(agent_name);
+            let mut cmd = std::process::Command::new(&agent_name);
             cmd.arg(&prompt_str);
             if !model_str.is_empty() {
                 cmd.arg("--model");
@@ -83,6 +104,27 @@ impl Evaluator {
                 },
             }
         };
+        let duration_ms = start.elapsed().as_millis() as u64;
+
+        if let Some(ref ctx) = child_ctx {
+            let mut payload = serde_json::json!({
+                "agent": agent_name,
+                "duration_ms": duration_ms,
+                "exit_code": result.exit_code,
+                "stdout_len": result.stdout.len(),
+                "stderr_len": result.stderr.len(),
+            });
+            if telemetry::capture_payload() {
+                let obj = payload.as_object_mut().unwrap();
+                obj.insert("stdout".to_string(), serde_json::Value::String(result.stdout.clone()));
+                obj.insert("stderr".to_string(), serde_json::Value::String(result.stderr.clone()));
+            }
+            telemetry::emit(
+                ctx.clone(),
+                telemetry::event::EventKind::AgentResponse,
+                payload,
+            );
+        }
 
         {
             let mut scope = self.current_scope.lock().unwrap();
@@ -94,13 +136,25 @@ impl Evaluator {
         if let Some(ref compact) = n.compact {
             if let Ok(compact_val) = self.eval_expr(compact) {
                 let s = format!("{}", compact_val);
-                if let Ok(d) = crate::compact::Directive::parse(&s) {
+                if let Ok(d) = crate::runtime::compact::Directive::parse(&s) {
                     d.apply(&mut self.compact_config);
                 }
             }
         }
 
         if result.exit_code != 0 {
+            if let Some(ref ctx) = child_ctx {
+                telemetry::emit(
+                    ctx.clone(),
+                    telemetry::event::EventKind::Error,
+                    serde_json::json!({
+                        "source": "agent_call",
+                        "agent": agent_name,
+                        "exit_code": result.exit_code,
+                        "stderr": result.stderr,
+                    }),
+                );
+            }
             return Err(EvalError::Exit(ExitError {
                 code: result.exit_code,
             }));

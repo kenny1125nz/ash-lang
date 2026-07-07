@@ -17,6 +17,7 @@
     <div class="container">
       <div class="logo"><span>ash</span></div>
       <nav>
+        <a href="#getting-started">Getting Started</a>
         <a href="#how-it-works">How it works</a>
         <a href="#playground">Playground</a>
         <a href="https://github.com/kenny1125nz/ash-lang" target="_blank">GitHub</a>
@@ -94,7 +95,7 @@
               <span class="cmp-badge">Step 2: Run &mdash; agents execute each task in order</span>
             </div>
             <div class="terminal" id="terminal">
-              <div class="terminal-line" style="animation-delay:0.2s"><span class="tp">$</span> ash tasks/</div>
+              <div class="terminal-line" style="animation-delay:0.2s"><span class="tp">$</span> ash --agent opencode tasks/</div>
               <div class="terminal-line" style="animation-delay:0.8s"><span class="tp">[1/4]</span> 01-research.md → <span class="ag">opencode</span> <span class="model">sonnet-4</span></div>
               <div class="terminal-line" style="animation-delay:1.4s"><span class="tp">[2/4]</span> 02-implement.md → <span class="ag">claude-code</span> <span class="model">claude-sonnet-4</span></div>
               <div class="terminal-line" style="animation-delay:2.0s"><span class="tp">[3/4]</span> 03-review.ash <span class="ash-ext">(shebang: codex)</span></div>
@@ -107,10 +108,35 @@
     </div>
   </section>
 
+  <section class="pain-points" id="getting-started">
+    <div class="container">
+      <h2 class="section-title">Getting Started</h2>
+
+      <p class="section-desc" style="margin-top:32px"><strong>Built-in support:</strong> opencode, claude-code, codex, gemini-cli, kimi.</p>
+
+      <p class="section-desc" style="margin-top:32px">Use <code>--agent</code> to specify which agent to run with:</p>
+      <pre><code>ash --agent opencode ./tasks</code></pre>
+      <p style="margin-top:-16px;margin-bottom:32px;color:var(--text2);font-size:14px">The <code>tasks/</code> folder contains numbered <code>.md</code> files — each file is one task sent to the agent, executed in sorted order. Drop in an <code>.ash</code> file when you need loops, retries, or conditionals. See <a href="#how-it-works">How Ash Works</a> for the expected folder layout.</p>
+
+      <p class="section-desc" style="margin-top:32px">If you add a new agent after ash was already installed, run:</p>
+      <pre><code>ash discover</code></pre>
+
+      <p class="section-desc" style="margin-top:24px">Any CLI-based agent can be configured manually via <code>ash.yml</code>:</p>
+      <pre><code>agents:
+  my-tool:
+    type: local-cli
+    cmd: my-tool
+    message_flag: "--prompt"
+    yes_flag: "--yes"</code></pre>
+    </div>
+    </div>
+  </section>
+
   <section class="syntax-ref">
     <div class="container">
       <h2 class="section-title">When You Need Full Orchestration</h2>
       <p class="section-desc">Markdown tasks handle simple agent calls. Drop in an <code>.ash</code> file when a single prompt isn't enough — variables, conditionals, shell commands within one step. Standalone scripts give you the full language: loops, retry, parallelism, functions. Same runtime, same state passing. Just add power as you need it.</p>
+
       <div class="ref-grid">
         <div class="ref-card">
           <h3>Variables, Strings & Shell</h3>
@@ -152,6 +178,21 @@ include "helpers.ash"
 review("src/main.rs")</code></pre>
         </div>
       </div>
+
+      <p style="margin-top:40px;margin-bottom:24px;color:var(--text2);font-size:15px">For <code>.ash</code> scripts, declare the agent with a shebang:</p>
+      <pre><code>#!opencode:1.0
+
+do "Review src/" with opencode</code></pre>
+
+      <p style="margin-top:32px;margin-bottom:24px;color:var(--text2);font-size:15px">For <code>.md</code> tasks, optionally set the agent in YAML frontmatter:</p>
+      <pre><code>---
+agent: opencode
+model: sonnet
+---
+
+# Task Title
+
+The prompt content goes here...</code></pre>
     </div>
   </section>
 
@@ -208,7 +249,6 @@ print "Completed ${len(TASKS)} tasks"
         </div>
         <div class="playground-toolbar">
           <button class="btn btn-green" onclick="runScript()">Run</button>
-          <button class="btn" onclick="clearOutput()">Clear Output</button>
           <span style="flex:1"></span>
           <span style="font-size:12px;color:var(--text2)">
             <span id="wasm-status" style="margin-left:8px;color:var(--accent3)">loading WASM...</span>

@@ -1,29 +1,23 @@
-pub mod token;
-pub mod value;
-pub mod ast;
-pub mod scope;
-pub mod compact;
-pub mod lexer;
-pub mod parser;
-pub mod interpolation;
-pub mod executor;
+pub mod config;
+pub mod lang;
+pub mod runtime;
 pub mod engine;
 pub mod eval;
-pub mod tree;
 #[cfg(feature = "repl")]
 pub mod repl;
 pub mod log;
+pub mod telemetry;
 
 #[cfg(test)]
 mod thread_safe_tests {
-    use crate::ast::*;
-    use crate::compact::*;
+    use crate::lang::ast::*;
+    use crate::runtime::compact::*;
     use crate::engine::*;
     use crate::eval::*;
-    use crate::executor::*;
-    use crate::scope::*;
-    use crate::token::*;
-    use crate::value::*;
+    use crate::runtime::executor::*;
+    use crate::runtime::scope::*;
+    use crate::lang::token::*;
+    use crate::runtime::value::*;
 
     fn assert_send<T: Send>() {}
     fn assert_sync<T: Sync>() {}
@@ -98,5 +92,18 @@ mod thread_safe_tests {
         assert_sync::<ExecuteRequest>();
         assert_send::<ExecuteResponse>();
         assert_sync::<ExecuteResponse>();
+    }
+
+    #[test]
+    fn telemetry_types() {
+        use crate::telemetry::context::SpanContext;
+        use crate::telemetry::event::TelemetryEvent;
+        use crate::telemetry::filter::Filter;
+        assert_send::<SpanContext>();
+        assert_sync::<SpanContext>();
+        assert_send::<TelemetryEvent>();
+        assert_sync::<TelemetryEvent>();
+        assert_send::<Filter>();
+        assert_sync::<Filter>();
     }
 }
