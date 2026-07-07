@@ -217,6 +217,12 @@ function setupWorkerHandlers() {
       return;
     }
 
+    if (msg.type === 'worker_error') {
+      wasmStatusEl.textContent = 'WASM error: ' + msg.msg;
+      wasmStatusEl.style.color = 'var(--accent4)';
+      return;
+    }
+
     if (msg.type === 'repl_ready') {
       replReady = true;
       return;
@@ -274,7 +280,7 @@ function setupWorkerHandlers() {
 // --- WASM init ---
 async function initWasm() {
   try {
-    evalWorker = new Worker('./eval-worker.js', { type: 'module' });
+    evalWorker = new Worker('js/eval-worker.js', { type: 'module' });
     setupWorkerHandlers();
     wasmStatusEl.textContent = 'loading WASM...';
     wasmStatusEl.style.color = 'var(--accent3)';

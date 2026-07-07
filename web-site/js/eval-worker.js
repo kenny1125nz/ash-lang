@@ -104,7 +104,7 @@ async function init() {
     }
     self.postMessage({ type: 'worker_ready', blocking: useBlocking, stateBuf, reqBuf, resBuf });
   } catch (e) {
-    self.postMessage({ type: 'output_done', full: 'Worker init error: ' + e.message });
+    self.postMessage({ type: 'worker_error', msg: 'Worker init error: ' + e.message });
   }
 }
 
