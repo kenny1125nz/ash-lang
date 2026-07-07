@@ -3,3 +3,4 @@ node_modules/
 *.log
 ash-wasm/pkg/
 web-site/wasm/
+.wrangler/

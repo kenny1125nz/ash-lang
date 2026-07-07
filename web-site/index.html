@@ -35,100 +35,74 @@
     </div>
   </section>
 
+  <section class="compare">
+    <div class="container">
+      <h2 class="section-title">Deterministic Control, AI Execution</h2>
+      <p class="section-desc">AI agents handle ambiguity — understanding intent, making judgments. They're bad at sequencing, branching, and retrying. Ash handles the structure. Agents handle the content.</p>
+      <div class="pain-grid" style="margin-top:32px">
+        <div class="pain-card">
+          <h3>Guaranteed Sequencing</h3>
+          <p>Tasks run in numbered order every time. No "what should I do next?" — the script decides. The agent executes.</p>
+        </div>
+        <div class="pain-card">
+          <h3>Bounded Autonomy</h3>
+          <p>The agent decides <em>how</em> to do its step. Ash decides <em>whether</em> the step happens, how many times, and what comes next.</p>
+        </div>
+        <div class="pain-card">
+          <h3>Repeatability</h3>
+          <p>A weekly report, a recurring audit, a batch job — same process every time, even when the content of each step varies.</p>
+        </div>
+        <div class="pain-card">
+          <h3>Execution Efficiency</h3>
+          <p>Pre-determined control flow runs at CPU speed. AI time is spent only where it adds value — on the content of each step.</p>
+        </div>
+        <div class="pain-card">
+          <h3>Workflows as Code</h3>
+          <p>Review content, audit compliance, publish updates — all live in files you commit, version, share, and re-run. Not buried in chat threads.</p>
+        </div>
+        <div class="pain-card">
+          <h3>Agent-Agnostic</h3>
+          <p>OpenCode, Claude Code, Aider, or a custom tool. Define in a config file. Swap providers without touching your workflows.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section class="pain-points" id="how-it-works">
     <div class="container">
       <h2 class="section-title">How Ash Works</h2>
-      <p class="section-desc">Ash runs a folder of markdown files through AI agents in numbered order — no scripting required. Each file is a task. Frontmatter sets the agent and model. Output flows between steps.</p>
+      <p class="section-desc">Drop markdown files in a folder, number them, and run. Each file is a task sent to an AI agent. Output flows between steps.</p>
 
-      <div class="code-compare" style="margin-top:32px">
-        <div class="code-compare-card highlight" style="max-width:100%">
-          <h3>tasks/</h3>
-          <div class="cmp-badge">$ ash tasks/ &nbsp;→&nbsp; sequential AI task execution</div>
-          <pre><code>tasks/
+      <div class="how-grid">
+        <div class="how-card">
+          <div class="code-compare-card highlight" style="margin:0">
+            <div class="how-card-header">
+              <h3>tasks/</h3>
+              <span class="cmp-badge">Step 1: Create a folder of tasks</span>
+            </div>
+            <pre><code>tasks/
 ├── 01-research.md
 ├── 02-implement.md
 ├── 03-review.ash
 └── 04-deploy.md</code></pre>
+          </div>
         </div>
-      </div>
-
-      <div class="code-compare" style="margin-top:16px">
-        <div class="code-compare-card">
-          <h3>Markdown task (01-research.md)</h3>
-          <pre><code>---
-agent: opencode
-model: sonnet
----
-
-# Research the login system
-
-Trace all files in the login flow.
-Document responsibilities, inputs,
-and test coverage per file.</code></pre>
+        <div class="how-card">
+          <div class="code-compare-card" style="margin:0">
+            <div class="how-card-header">
+              <h3>Terminal</h3>
+              <span class="cmp-badge">Step 2: Run &mdash; agents execute each task in order</span>
+            </div>
+            <div class="terminal" id="terminal">
+              <div class="terminal-line" style="animation-delay:0.2s"><span class="tp">$</span> ash tasks/</div>
+              <div class="terminal-line" style="animation-delay:0.8s"><span class="tp">[1/4]</span> 01-research.md → <span class="ag">opencode</span> <span class="model">sonnet-4</span></div>
+              <div class="terminal-line" style="animation-delay:1.4s"><span class="tp">[2/4]</span> 02-implement.md → <span class="ag">claude-code</span> <span class="model">claude-sonnet-4</span></div>
+              <div class="terminal-line" style="animation-delay:2.0s"><span class="tp">[3/4]</span> 03-review.ash → <span class="ag">aider</span> <span class="model">claude-haiku-3</span></div>
+              <div class="terminal-line" style="animation-delay:2.6s"><span class="tp">[4/4]</span> 04-deploy.md → <span class="ag">opencode</span> <span class="model">haiku-flash</span></div>
+              <div class="terminal-line" style="animation-delay:3.2s;color:var(--accent2)">4 tasks, 4 passed</div>
+            </div>
+          </div>
         </div>
-        <div class="code-compare-card">
-          <h3>Ash task (03-review.ash)</h3>
-          <pre><code>#!opencode:1.0
-
-RESULT = $(npm test 2>&1)
-if $? != 0 {
-  do "Tests failed. Fix errors
-and recompile.
-
-Test output:
-${RESULT}" with opencode
-}</code></pre>
-        </div>
-      </div>
-
-      <p class="section-desc" style="margin-top:24px">
-        Markdown and <code>.ash</code> files sort together by numeric prefix. Choose whichever fits each step.
-      </p>
-    </div>
-  </section>
-
-  <section class="syntax-ref">
-    <div class="container">
-      <h2 class="section-title">Progressive Complexity</h2>
-      <p class="section-desc">You never face more than you need. Start at level 1, add one concept at a time.</p>
-
-      <div style="overflow-x:auto;margin-top:24px">
-        <table style="width:100%;border-collapse:collapse;font-size:14px">
-          <thead>
-            <tr style="border-bottom:1px solid var(--border)">
-              <th style="text-align:left;padding:10px 12px;color:var(--text2);font-weight:600;white-space:nowrap">Level</th>
-              <th style="text-align:left;padding:10px 12px;color:var(--text2);font-weight:600">What you use</th>
-              <th style="text-align:left;padding:10px 12px;color:var(--text2);font-weight:600">What you get</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr style="border-bottom:1px solid var(--border)">
-              <td style="padding:10px 12px;color:var(--accent);font-weight:600;white-space:nowrap">1</td>
-              <td style="padding:10px 12px">Folder of <code>.md</code> files</td>
-              <td style="padding:10px 12px">Sequential AI task execution</td>
-            </tr>
-            <tr style="border-bottom:1px solid var(--border)">
-              <td style="padding:10px 12px;color:var(--accent);font-weight:600;white-space:nowrap">2</td>
-              <td style="padding:10px 12px">YAML frontmatter</td>
-              <td style="padding:10px 12px">Per-task agent, model, on_fail</td>
-            </tr>
-            <tr style="border-bottom:1px solid var(--border)">
-              <td style="padding:10px 12px;color:var(--accent);font-weight:600;white-space:nowrap">3</td>
-              <td style="padding:10px 12px"><code>.ash</code> files in the tree</td>
-              <td style="padding:10px 12px">Logic within a single step</td>
-            </tr>
-            <tr style="border-bottom:1px solid var(--border)">
-              <td style="padding:10px 12px;color:var(--accent);font-weight:600;white-space:nowrap">4</td>
-              <td style="padding:10px 12px"><code>${stdout}</code>, <code>$?</code></td>
-              <td style="padding:10px 12px">State passing between tasks</td>
-            </tr>
-            <tr>
-              <td style="padding:10px 12px;color:var(--accent);font-weight:600;white-space:nowrap">5</td>
-              <td style="padding:10px 12px">Standalone <code>.ash</code> scripts</td>
-              <td style="padding:10px 12px">Full orchestration: loops, retry, parallelism</td>
-            </tr>
-          </tbody>
-        </table>
       </div>
     </div>
   </section>
@@ -136,7 +110,7 @@ ${RESULT}" with opencode
   <section class="syntax-ref">
     <div class="container">
       <h2 class="section-title">When You Need Full Orchestration</h2>
-      <p class="section-desc">When the workflow itself needs programming — iterate over files, retry on failure, branch on results — standalone <code>.ash</code> scripts give you the full pipeline.</p>
+      <p class="section-desc">Markdown tasks handle simple agent calls. Drop in an <code>.ash</code> file when a single prompt isn't enough — variables, conditionals, shell commands within one step. Standalone scripts give you the full language: loops, retry, parallelism, functions. Same runtime, same state passing. Just add power as you need it.</p>
       <div class="ref-grid">
         <div class="ref-card">
           <h3>Variables, Strings & Shell</h3>
@@ -176,39 +150,6 @@ if $? == 0 {
 
 include "helpers.ash"
 review("src/main.rs")</code></pre>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="compare">
-    <div class="container">
-      <h2 class="section-title">Deterministic Control, AI Execution</h2>
-      <p class="section-desc">AI agents handle ambiguity — understanding intent, making judgments. They're bad at sequencing, branching, and retrying. Ash handles the structure. Agents handle the content.</p>
-      <div class="pain-grid" style="margin-top:32px">
-        <div class="pain-card">
-          <h3>Guaranteed Sequencing</h3>
-          <p>Tasks run in numbered order every time. No "what should I do next?" — the script decides. The agent executes.</p>
-        </div>
-        <div class="pain-card">
-          <h3>Bounded Autonomy</h3>
-          <p>The agent decides <em>how</em> to do its step. Ash decides <em>whether</em> the step happens, how many times, and what comes next.</p>
-        </div>
-        <div class="pain-card">
-          <h3>Repeatability</h3>
-          <p>A weekly report, a recurring audit, a batch job — same process every time, even when the content of each step varies.</p>
-        </div>
-        <div class="pain-card">
-          <h3>Execution Efficiency</h3>
-          <p>Pre-determined control flow runs at CPU speed. AI time is spent only where it adds value — on the content of each step.</p>
-        </div>
-        <div class="pain-card">
-          <h3>Workflows as Code</h3>
-          <p>Review content, audit compliance, publish updates — all live in files you commit, version, share, and re-run. Not buried in chat threads.</p>
-        </div>
-        <div class="pain-card">
-          <h3>Agent-Agnostic</h3>
-          <p>OpenCode, Claude Code, Aider, or a custom tool. Define in a config file. Swap providers without touching your workflows.</p>
         </div>
       </div>
     </div>
