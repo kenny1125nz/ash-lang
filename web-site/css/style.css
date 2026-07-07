@@ -265,6 +265,8 @@ td:first-child { color: var(--text); font-family: var(--font-mono); font-size: 1
 }
 .terminal-line {
   opacity: 0;
+}
+.terminal.visible .terminal-line {
   animation: typeIn 0.4s ease-out forwards;
 }
 @keyframes typeIn {
