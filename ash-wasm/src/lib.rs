@@ -5,8 +5,8 @@ use wasm_bindgen::prelude::*;
 
 use ash::engine::{BrowserAdapter, ExecuteRequest, ExecuteResponse};
 use ash::eval::{EvalError, Evaluator, SharedWriter};
-use ash::scope::Scope;
-use ash::value::Value;
+use ash::runtime::scope::Scope;
+use ash::runtime::value::Value;
 
 fn agent_callback() -> &'static Mutex<Option<js_sys::Function>> {
     static CB: OnceLock<Mutex<Option<js_sys::Function>>> = OnceLock::new();
@@ -83,7 +83,7 @@ fn call_js_agent(prompt: &str, model: &str) -> ExecuteResponse {
 
 #[wasm_bindgen]
 pub fn parse(source: &str) -> String {
-    match ash::parser::parse_str(source) {
+    match ash::lang::parser::parse_str(source) {
         Ok(script) => format!("{:#?}", script),
         Err(e) => format!("Parse error: {}", e),
     }
@@ -91,7 +91,7 @@ pub fn parse(source: &str) -> String {
 
 #[wasm_bindgen]
 pub fn run(source: &str) -> String {
-    let script = match ash::parser::parse_str(source) {
+    let script = match ash::lang::parser::parse_str(source) {
         Ok(s) => s,
         Err(e) => return format!("Parse error: {}", e),
     };
@@ -179,7 +179,7 @@ pub fn repl_eval(line: &str) -> String {
         return handle_repl_dot_cmd(trimmed, eval);
     }
 
-    let script = match ash::parser::parse_str(line) {
+    let script = match ash::lang::parser::parse_str(line) {
         Ok(s) => s,
         Err(e) => return format!("error: {}", e),
     };
@@ -247,8 +247,8 @@ fn handle_repl_dot_cmd(cmd: &str, eval: &mut Evaluator) -> String {
     }
 }
 
-fn is_repl_expr_node(node: &ash::ast::Node) -> bool {
-    use ash::ast::Node;
+fn is_repl_expr_node(node: &ash::lang::ast::Node) -> bool {
+    use ash::lang::ast::Node;
     matches!(
         node,
         Node::VarAssign(_)
