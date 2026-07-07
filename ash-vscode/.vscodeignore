@@ -4,7 +4,6 @@
 *.md
 src/**
 node_modules/**
-out/**
 test/**
 tsconfig.json
 **/*.vsix

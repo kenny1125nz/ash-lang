@@ -105,6 +105,32 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+  vscode-publish:
+    name: Publish VS Code Extension
+    if: github.ref_type == 'tag'
+    needs: github-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+      - name: Install dependencies and compile
+        run: |
+          cd ash-vscode
+          npm ci
+          npm run compile
+      - name: Publish to marketplace
+        run: |
+          TAG="${{ github.ref_name }}"
+          VER="${TAG#v}"
+          cd ash-vscode
+          npm version "$VER" --no-git-tag-version
+          npm install -g @vscode/vsce
+          vsce publish --no-git-tag-version "$VER"
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
   deploy-website:
     name: Deploy Website
     if: github.ref_type == 'tag'
