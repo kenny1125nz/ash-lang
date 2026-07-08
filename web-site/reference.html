@@ -262,7 +262,16 @@ ash ./tasks --continue-on-error
 </tbody></table>
 <h3>Numeric prefix</h3>
 <p>Files and directories must start with a numeric prefix (<code>01-</code>, <code>02-step-</code>, etc.) to be included. Files without a prefix are silently skipped.</p>
-<p>Duplicate prefixes at the same level (e.g., <code>01-foo.md</code> and <code>01-bar.md</code> in the same directory) are reported as an error. Each prefix must be unique within its directory to maintain a deterministic ordering contract.</p>
+<p>Same-prefix files at the same level form a parallel group — all tasks with the same prefix run concurrently:</p>
+<pre><code>tasks/
+├── 01-research.md
+├── 02-parse-data.md
+├── 02-analyze-results.md    ← runs in parallel with 02-parse-data.md
+├── 02-summarize.md          ← also part of the parallel group
+└── 03-implement.md          ← waits for all of 02-* to finish
+</code></pre>
+<p>By default, ash prompts for confirmation: <em>&quot;N parallel group(s) detected. Run them in parallel? [y/N]&quot;</em>. Pass <code>--yes</code> to skip the prompt and always allow. In non-interactive mode (CI, piped stdin), parallel groups produce an error unless <code>--yes</code> is given.</p>
+<p>A file and a subdirectory with the same prefix form a combined parallel group — the file and the entire subdirectory walk run concurrently on separate threads.</p>
 <h3>Frontmatter (<code>.md</code> files)</h3>
 <p>Markdown tasks can set per-task configuration with YAML frontmatter:</p>
 <pre><code class="language-markdown">---
@@ -339,6 +348,10 @@ if $? != 0 {
 <tr>
 <td><code>--check</code> / <code>-c</code></td>
 <td>Validate syntax without executing</td>
+</tr>
+<tr>
+<td><code>--yes</code> / <code>-y</code></td>
+<td>Allow parallel execution without confirmation prompt</td>
 </tr>
 <tr>
 <td><code>--agent &lt;name&gt;:&lt;model&gt;</code></td>

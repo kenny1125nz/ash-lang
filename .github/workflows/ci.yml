@@ -20,12 +20,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build --verbose
       - run: cargo test --verbose
-      - name: Verify docs are in sync
+      - name: Generate docs
         working-directory: ./
         run: |
           npm install --prefix docs
           node docs/assemble.js
-          git diff --exit-code README.md npm-package/README.md ash-vscode/README.md docs/website-reference.md
+      - name: Commit generated docs
+        run: |
+          git config user.name "ash CI"
+          git config user.email "ci@ash-lang.com"
+          git add README.md npm-package/README.md ash-vscode/README.md web-site/reference.html docs/website-reference.md
+          git diff --cached --quiet || git commit -m "sync generated docs [skip ci]"
 
   release:
     name: Release (${{ matrix.target }})
