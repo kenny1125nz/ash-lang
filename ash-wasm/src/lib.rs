@@ -8,6 +8,8 @@ use ash::eval::{EvalError, Evaluator, SharedWriter};
 use ash::runtime::scope::Scope;
 use ash::runtime::value::Value;
 
+
+
 fn agent_callback() -> &'static Mutex<Option<js_sys::Function>> {
     static CB: OnceLock<Mutex<Option<js_sys::Function>>> = OnceLock::new();
     CB.get_or_init(|| Mutex::new(None))

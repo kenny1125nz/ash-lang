@@ -1,3 +1,4 @@
+use crate::AshError;
 use crate::lang::ast::*;
 use crate::lang::lexer::{self, parse_compact_line, parse_shebang};
 use crate::lang::token::{Token, TokenKind};
@@ -53,19 +54,19 @@ impl Parser {
         }
     }
 
-    fn expect(&mut self, kind: TokenKind) -> Result<Token, String> {
+    fn expect(&mut self, kind: TokenKind) -> Result<Token, AshError> {
         let tok = self.current().clone();
         if tok.kind != kind {
-            return Err(format!(
+            return Err(AshError::Msg(format!(
                 "expected {} at {}:{}, got {}({:?})",
                 kind, tok.line, tok.col, tok.kind, tok.literal
-            ));
+            )));
         }
         self.pos += 1;
         Ok(tok)
     }
 
-    pub fn parse(&mut self) -> Result<Script, String> {
+    pub fn parse(&mut self) -> Result<Script, AshError> {
         let mut script = Script {
             shebang: None,
             compact: None,
@@ -117,10 +118,10 @@ impl Parser {
         Ok(script)
     }
 
-    fn parse_shebang_decl(&mut self) -> Result<ShebangDecl, String> {
+    fn parse_shebang_decl(&mut self) -> Result<ShebangDecl, AshError> {
         let tok = self.advance();
         let sh = parse_shebang(&tok.literal).map_err(|e| {
-            format!("at {}:{}: {}", tok.line, tok.col, e)
+            AshError::Msg(format!("at {}:{}: {}", tok.line, tok.col, e))
         })?;
         Ok(ShebangDecl {
             pos: Pos {
@@ -133,7 +134,7 @@ impl Parser {
         })
     }
 
-    fn parse_statement(&mut self) -> Result<Node, String> {
+    fn parse_statement(&mut self) -> Result<Node, AshError> {
         let tok = self.current().clone();
 
         match tok.kind {
@@ -181,7 +182,7 @@ impl Parser {
         }
     }
 
-    fn parse_block(&mut self) -> Result<Block, String> {
+    fn parse_block(&mut self) -> Result<Block, AshError> {
         let open_tok = self.expect(TokenKind::TkLBrace)?;
         let mut block = Block {
             pos: Pos {
@@ -204,7 +205,7 @@ impl Parser {
         Ok(block)
     }
 
-    fn parse_var_assign(&mut self) -> Result<Node, String> {
+    fn parse_var_assign(&mut self) -> Result<Node, AshError> {
         let name = self.advance();
         self.expect(TokenKind::TkAssign)?;
         let val = self.parse_expr()?;
@@ -218,12 +219,12 @@ impl Parser {
         }))
     }
 
-    fn parse_fn_call(&mut self) -> Result<Node, String> {
+    fn parse_fn_call(&mut self) -> Result<Node, AshError> {
         let name_tok = self.advance();
         self.parse_fn_call_args(name_tok)
     }
 
-    fn parse_fn_call_args(&mut self, name_tok: Token) -> Result<Node, String> {
+    fn parse_fn_call_args(&mut self, name_tok: Token) -> Result<Node, AshError> {
         self.expect(TokenKind::TkLParen)?;
         self.skip_newlines();
 
@@ -251,7 +252,7 @@ impl Parser {
         }))
     }
 
-    fn parse_if(&mut self) -> Result<Node, String> {
+    fn parse_if(&mut self) -> Result<Node, AshError> {
         let tok = self.advance();
         self.skip_newlines();
         let cond = self.parse_binary_expr(0)?;
@@ -304,17 +305,17 @@ impl Parser {
         Ok(Node::IfStmt(stmt))
     }
 
-    fn parse_for(&mut self) -> Result<Node, String> {
+    fn parse_for(&mut self) -> Result<Node, AshError> {
         let tok = self.advance();
         self.skip_newlines();
         let var_tok = self.expect(TokenKind::TkIdent)?;
 
         let in_tok = self.expect(TokenKind::TkIdent)?;
         if in_tok.literal != "in" {
-            return Err(format!(
+            return Err(AshError::Msg(format!(
                 "expected 'in' at {}:{}",
                 var_tok.line, var_tok.col
-            ));
+            )));
         }
 
         let list = self.parse_binary_expr(0)?;
@@ -332,7 +333,7 @@ impl Parser {
         }))
     }
 
-    fn parse_while(&mut self) -> Result<Node, String> {
+    fn parse_while(&mut self) -> Result<Node, AshError> {
         let tok = self.advance();
         self.skip_newlines();
         let cond = self.parse_binary_expr(0)?;
@@ -349,7 +350,7 @@ impl Parser {
         }))
     }
 
-    fn parse_fn_decl(&mut self) -> Result<Node, String> {
+    fn parse_fn_decl(&mut self) -> Result<Node, AshError> {
         let tok = self.advance();
         self.skip_newlines();
         let name_tok = self.expect(TokenKind::TkIdent)?;
@@ -380,24 +381,9 @@ impl Parser {
         }))
     }
 
-    fn parse_do(&mut self) -> Result<Node, String> {
-        let tok = self.advance();
-        self.skip_newlines();
-        let prompt = self.parse_expr()?;
-
-        let mut agent = AgentCall {
-            pos: Pos {
-                line: tok.line,
-                col: tok.col,
-            },
-            prompt: Box::new(prompt),
-            agent: None,
-            subagent: String::new(),
-            model: None,
-            dir: None,
-            compact: None,
-        };
-
+    /// Parse optional `with <agent> [subagent <name>]` and `using <model>` clauses
+    /// that follow a prompt in `do` or evaluator expressions.
+    fn parse_agent_call_clauses(&mut self, agent: &mut AgentCall) -> Result<(), AshError> {
         if self.current().kind == TokenKind::TkIdent
             && self.current().literal == "with"
         {
@@ -405,10 +391,8 @@ impl Parser {
             let ident = self.expect(TokenKind::TkIdent)?;
 
             if ident.literal == "subagent" {
-                // with subagent <name>  — backward compat, use shebang engine as agent
                 agent.subagent = self.parse_hyphenated_ident()?;
             } else {
-                // with <agent> [subagent <name>]
                 let mut agent_name = ident.literal;
                 while self.current().kind == TokenKind::TkMinus
                     && self.peek().kind == TokenKind::TkIdent
@@ -458,6 +442,29 @@ impl Parser {
             }
         }
 
+        Ok(())
+    }
+
+    fn parse_do(&mut self) -> Result<Node, AshError> {
+        let tok = self.advance();
+        self.skip_newlines();
+        let prompt = self.parse_expr()?;
+
+        let mut agent = AgentCall {
+            pos: Pos {
+                line: tok.line,
+                col: tok.col,
+            },
+            prompt: Box::new(prompt),
+            agent: None,
+            subagent: String::new(),
+            model: None,
+            dir: None,
+            compact: None,
+        };
+
+        self.parse_agent_call_clauses(&mut agent)?;
+
         if self.current().kind == TokenKind::TkIdent
             && self.current().literal == "in"
         {
@@ -477,7 +484,7 @@ impl Parser {
         Ok(Node::AgentCall(agent))
     }
 
-    fn parse_try(&mut self) -> Result<Node, String> {
+    fn parse_try(&mut self) -> Result<Node, AshError> {
         let tok = self.advance();
         self.skip_newlines();
         let body = self.parse_block()?;
@@ -490,10 +497,10 @@ impl Parser {
             self.advance();
             let with_tok = self.expect(TokenKind::TkIdent)?;
             if with_tok.literal != "with" {
-                return Err(format!(
+                return Err(AshError::Msg(format!(
                     "expected 'with' at {}:{}",
                     tok.line, tok.col
-                ));
+                )));
             }
             self.skip_newlines();
             eval_mode = true;
@@ -536,10 +543,10 @@ impl Parser {
 
             let upto_tok = self.expect(TokenKind::TkIdent)?;
             if upto_tok.literal != "upto" {
-                return Err(format!(
+                return Err(AshError::Msg(format!(
                     "expected 'upto' at {}:{}",
                     tok.line, tok.col + 1
-                ));
+                )));
             }
 
             let max_expr = self.parse_expr()?;
@@ -570,10 +577,10 @@ impl Parser {
 
         let upto_tok = self.expect(TokenKind::TkIdent)?;
         if upto_tok.literal != "upto" {
-            return Err(format!(
+            return Err(AshError::Msg(format!(
                 "expected 'upto' at {}:{}",
                 tok.line, tok.col + 1
-            ));
+            )));
         }
 
         let max_expr = self.parse_expr()?;
@@ -589,7 +596,7 @@ impl Parser {
         }))
     }
 
-    fn parse_evaluate(&mut self) -> Result<Node, String> {
+    fn parse_evaluate(&mut self) -> Result<Node, AshError> {
         let tok = self.advance();
         self.skip_newlines();
         let body = self.parse_block()?;
@@ -597,10 +604,10 @@ impl Parser {
 
         let by_tok = self.expect(TokenKind::TkIdent)?;
         if by_tok.literal != "by" {
-            return Err(format!(
+            return Err(AshError::Msg(format!(
                 "expected 'by' after evaluate body at {}:{}",
                 tok.line, tok.col
-            ));
+            )));
         }
         self.skip_newlines();
 
@@ -617,62 +624,7 @@ impl Parser {
                 compact: None,
             };
 
-            if self.current().kind == TokenKind::TkIdent
-                && self.current().literal == "with"
-            {
-                self.advance();
-                let ident = self.expect(TokenKind::TkIdent)?;
-                if ident.literal == "subagent" {
-                    agent.subagent = self.parse_hyphenated_ident()?;
-                } else {
-                    let mut agent_name = ident.literal;
-                    while self.current().kind == TokenKind::TkMinus
-                        && self.peek().kind == TokenKind::TkIdent
-                    {
-                        agent_name.push('-');
-                        self.advance();
-                        let part = self.expect(TokenKind::TkIdent)?;
-                        agent_name.push_str(&part.literal);
-                    }
-                    agent.agent = Some(agent_name);
-                    if self.current().kind == TokenKind::TkIdent
-                        && self.current().literal == "subagent"
-                    {
-                        self.advance();
-                        agent.subagent = self.parse_hyphenated_ident()?;
-                    }
-                }
-            }
-
-            if self.current().kind == TokenKind::TkIdent
-                && self.current().literal == "using"
-            {
-                self.advance();
-                if self.current().kind == TokenKind::TkIdent {
-                    let mut model_name = self.current().literal.clone();
-                    self.advance();
-                    while (self.current().kind == TokenKind::TkMinus || self.current().kind == TokenKind::TkSlash)
-                        && self.peek().kind == TokenKind::TkIdent
-                    {
-                        if self.current().kind == TokenKind::TkMinus {
-                            model_name.push('-');
-                        } else {
-                            model_name.push('/');
-                        }
-                        self.advance();
-                        let part = self.expect(TokenKind::TkIdent)?;
-                        model_name.push_str(&part.literal);
-                    }
-                    agent.model = Some(Box::new(Node::StringLiteral(StringLiteral {
-                        pos: Pos { line: self.current().line, col: self.current().col },
-                        value: model_name,
-                        interps: vec![],
-                    })));
-                } else {
-                    let model = self.parse_primary()?;
-                    agent.model = Some(Box::new(model));
-                }
-            }
+            self.parse_agent_call_clauses(&mut agent)?;
 
             EvaluateEvaluator::Agent(agent)
         } else if self.current().kind == TokenKind::TkIdent
@@ -694,36 +646,36 @@ impl Parser {
             match fn_call {
                 Node::FnCall(fc) => EvaluateEvaluator::FnCall(fc),
                 _ => {
-                    return Err(format!(
+                    return Err(AshError::Msg(format!(
                         "expected function call at {}:{}",
                         tok.line, tok.col
-                    ))
+                    )))
                 }
             }
         } else {
-            return Err(format!(
+            return Err(AshError::Msg(format!(
                 "expected evaluator clause (start with @, exec, or function name) at {}:{}",
                 tok.line, tok.col
-            ));
+            )));
         };
 
         self.skip_newlines();
 
         let accept_tok = self.expect(TokenKind::TkIdent)?;
         if accept_tok.literal != "accept" {
-            return Err(format!(
+            return Err(AshError::Msg(format!(
                 "expected 'accept' at {}:{}",
                 tok.line, tok.col
-            ));
+            )));
         }
         self.skip_newlines();
 
         let by_tok2 = self.expect(TokenKind::TkIdent)?;
         if by_tok2.literal != "by" {
-            return Err(format!(
+            return Err(AshError::Msg(format!(
                 "expected 'by' after 'accept' at {}:{}",
                 tok.line, tok.col
-            ));
+            )));
         }
         self.skip_newlines();
 
@@ -732,10 +684,10 @@ impl Parser {
 
         let upto_tok = self.expect(TokenKind::TkIdent)?;
         if upto_tok.literal != "upto" {
-            return Err(format!(
+            return Err(AshError::Msg(format!(
                 "expected 'upto' at {}:{}",
                 tok.line, tok.col
-            ));
+            )));
         }
 
         let max_expr = self.parse_expr()?;
@@ -749,7 +701,7 @@ impl Parser {
         }))
     }
 
-    fn parse_within(&mut self) -> Result<Node, String> {
+    fn parse_within(&mut self) -> Result<Node, AshError> {
         let tok = self.advance();
         self.skip_newlines();
 
@@ -796,7 +748,7 @@ impl Parser {
         }))
     }
 
-    fn parse_wait(&mut self) -> Result<Node, String> {
+    fn parse_wait(&mut self) -> Result<Node, AshError> {
         let tok = self.advance();
         self.skip_newlines();
 
@@ -815,7 +767,7 @@ impl Parser {
         }))
     }
 
-    fn parse_exec(&mut self) -> Result<Node, String> {
+    fn parse_exec(&mut self) -> Result<Node, AshError> {
         let tok = self.advance();
         self.skip_newlines();
 
@@ -861,7 +813,7 @@ impl Parser {
         }))
     }
 
-    fn parse_print(&mut self) -> Result<Node, String> {
+    fn parse_print(&mut self) -> Result<Node, AshError> {
         let tok = self.advance();
         self.skip_newlines();
         let msg = self.parse_expr()?;
@@ -875,7 +827,7 @@ impl Parser {
         }))
     }
 
-    fn parse_exit(&mut self) -> Result<Node, String> {
+    fn parse_exit(&mut self) -> Result<Node, AshError> {
         let tok = self.advance();
         self.skip_newlines();
         let code = self.parse_expr()?;
@@ -889,7 +841,7 @@ impl Parser {
         }))
     }
 
-    fn parse_include(&mut self) -> Result<Node, String> {
+    fn parse_include(&mut self) -> Result<Node, AshError> {
         let tok = self.advance();
         self.skip_newlines();
         let path = self.parse_expr()?;
@@ -903,7 +855,7 @@ impl Parser {
         }))
     }
 
-    fn parse_compact_stmt(&mut self) -> Result<Node, String> {
+    fn parse_compact_stmt(&mut self) -> Result<Node, AshError> {
         let tok = self.advance();
         self.skip_newlines();
         let arg = self.parse_expr()?;
@@ -917,7 +869,7 @@ impl Parser {
         }))
     }
 
-    fn parse_session(&mut self) -> Result<Node, String> {
+    fn parse_session(&mut self) -> Result<Node, AshError> {
         let tok = self.advance();
         self.skip_newlines();
 
@@ -957,7 +909,7 @@ impl Parser {
         }))
     }
 
-    fn parse_use(&mut self) -> Result<Node, String> {
+    fn parse_use(&mut self) -> Result<Node, AshError> {
         let tok = self.advance();
         let agent = self.parse_hyphenated_ident()?;
         Ok(Node::UseAgent(UseAgent {
@@ -966,7 +918,7 @@ impl Parser {
         }))
     }
 
-    fn parse_env(&mut self) -> Result<Node, String> {
+    fn parse_env(&mut self) -> Result<Node, AshError> {
         let tok = self.advance();
         let key_tok = self.expect(TokenKind::TkIdent)?;
 
@@ -979,7 +931,7 @@ impl Parser {
         }))
     }
 
-    fn parse_return(&mut self) -> Result<Node, String> {
+    fn parse_return(&mut self) -> Result<Node, AshError> {
         let tok = self.advance();
         self.skip_newlines();
 
@@ -1007,7 +959,7 @@ impl Parser {
         }))
     }
 
-    fn parse_break(&mut self) -> Result<Node, String> {
+    fn parse_break(&mut self) -> Result<Node, AshError> {
         let tok = self.advance();
         Ok(Node::Break(Break {
             pos: Pos {
@@ -1017,7 +969,7 @@ impl Parser {
         }))
     }
 
-    fn parse_continue(&mut self) -> Result<Node, String> {
+    fn parse_continue(&mut self) -> Result<Node, AshError> {
         let tok = self.advance();
         Ok(Node::Continue(Continue {
             pos: Pos {
@@ -1029,11 +981,11 @@ impl Parser {
 
     // --- Expression parsing ---
 
-    fn parse_expr(&mut self) -> Result<Node, String> {
+    fn parse_expr(&mut self) -> Result<Node, AshError> {
         self.parse_binary_expr(0)
     }
 
-    fn parse_binary_expr(&mut self, min_prec: u32) -> Result<Node, String> {
+    fn parse_binary_expr(&mut self, min_prec: u32) -> Result<Node, AshError> {
         let mut left = self.parse_primary()?;
 
         while self.current().kind == TokenKind::TkLBracket {
@@ -1095,7 +1047,7 @@ impl Parser {
         Ok(left)
     }
 
-    fn parse_primary(&mut self) -> Result<Node, String> {
+    fn parse_primary(&mut self) -> Result<Node, AshError> {
         let tok = self.current().clone();
 
         if tok.kind == TokenKind::TkLBracket {
@@ -1251,10 +1203,10 @@ impl Parser {
 
         if tok.kind == TokenKind::TkIdent {
             if tok.literal == "and" || tok.literal == "or" {
-                return Err(format!(
+                return Err(AshError::Msg(format!(
                     "unexpected keyword {:?} in expression at {}:{}",
                     tok.literal, tok.line, tok.col
-                ));
+                )));
             }
             self.advance();
             return Ok(Node::VarRef(VarRef {
@@ -1266,13 +1218,13 @@ impl Parser {
             }));
         }
 
-        Err(format!(
+        Err(AshError::Msg(format!(
             "unexpected token {}({:?}) at {}:{}",
             tok.kind, tok.literal, tok.line, tok.col
-        ))
+        )))
     }
 
-    fn parse_array_literal(&mut self) -> Result<Node, String> {
+    fn parse_array_literal(&mut self) -> Result<Node, AshError> {
         let tok = self.advance();
         let mut elements = Vec::new();
         self.skip_newlines();
@@ -1305,7 +1257,7 @@ impl Parser {
         }))
     }
 
-    fn parse_hyphenated_ident(&mut self) -> Result<String, String> {
+    fn parse_hyphenated_ident(&mut self) -> Result<String, AshError> {
         let mut name = String::new();
         loop {
             let tok = self.expect(TokenKind::TkIdent)?;
@@ -1323,20 +1275,20 @@ impl Parser {
     }
 }
 
-pub fn parse(tokens: Vec<Token>) -> Result<Script, String> {
+pub fn parse(tokens: Vec<Token>) -> Result<Script, AshError> {
     Parser::new(tokens, "").parse()
 }
 
-pub fn parse_str(src: &str) -> Result<Script, String> {
+pub fn parse_str(src: &str) -> Result<Script, AshError> {
     let tokens = lexer::tokenize(src)?;
     Parser::new(tokens, src).parse()
 }
 
-pub fn parse_with_source(tokens: Vec<Token>, source: &str) -> Result<Script, String> {
+pub fn parse_with_source(tokens: Vec<Token>, source: &str) -> Result<Script, AshError> {
     Parser::new(tokens, source).parse()
 }
 
-pub fn parse_expr_str(src: &str) -> Result<Node, String> {
+pub fn parse_expr_str(src: &str) -> Result<Node, AshError> {
     let tokens = lexer::tokenize(src)?;
     Parser::new(tokens, src).parse_expr()
 }

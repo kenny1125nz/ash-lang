@@ -2,7 +2,7 @@
   "name": "vscode-ash",
   "displayName": "Ash Agent Shell",
   "description": "Syntax highlighting, run, and check commands for Ash (.ash) agent shell scripts",
-  "version": "0.1.0",
+  "version": "0.2.5",
   "publisher": "Ash-Lang-kenny",
   "license": "AGPL-3.0",
   "engines": {

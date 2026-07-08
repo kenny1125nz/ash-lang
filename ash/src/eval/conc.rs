@@ -1,9 +1,7 @@
-use std::sync::Arc;
-use std::thread;
+use std::sync::mpsc;
 
 use crate::lang::ast::*;
-use crate::runtime::compact::Config as CompactConfig;
-use crate::runtime::executor::Executor;
+use crate::util::{get_pool, lock_guard};
 
 use super::Evaluator;
 
@@ -13,78 +11,47 @@ impl Evaluator {
             if let Node::Block(block) = &**body {
                 let mut handles = Vec::new();
                 for stmt in &block.statements {
-                    let scope = self.current_scope.clone();
                     let stmt_clone = stmt.clone();
-                    let stdout = self.stdout.clone();
-                    let stderr = self.stderr.clone();
-                    let handle = thread::spawn(move || {
-                        let mut eval = Evaluator {
-                            global_scope: scope.clone(),
-                            current_scope: scope,
-                            stdout,
-                            stderr,
-                            executor: Executor::new(),
-                            compact_config: CompactConfig::new(),
-                            signal: None,
-                            bg_handles: Arc::new(std::sync::Mutex::new(Vec::new())),
-                            default_agent: super::DEFAULT_AGENT.to_string(),
-                            default_model: String::new(),
-                            session_depth: 0,
-                            within_stack: Vec::new(),
-                            telemetry_ctx: None,
-                            script_args: Vec::new(),
-                        };
+                    let mut eval = self.fork();
+                    let (tx, rx) = mpsc::channel();
+                    get_pool().execute(move || {
                         eval.push_scope();
                         let _ = eval.eval_statement(&stmt_clone);
+                        let _ = tx.send(());
                     });
-                    handles.push(handle);
+                    handles.push(rx);
                 }
-                for h in handles {
-                    let _ = h.join();
+                for rx in handles {
+                    let _ = rx.recv();
                 }
             }
         }
 
-        let bg_handles = std::mem::replace(&mut *self.bg_handles.lock().unwrap(), Vec::new());
-        for h in bg_handles {
-            let _ = h.join();
+        let bg_handles = std::mem::replace(&mut *lock_guard(&self.bg_handles), Vec::new());
+        for rx in bg_handles {
+            let _ = rx.recv();
         }
 
         Ok(super::Value::Int(0))
     }
 
     pub(super) fn eval_background(&mut self, n: &Background) -> Result<super::Value, super::EvalError> {
-        let scope = self.current_scope.clone();
         let stmt = n.stmt.clone();
-        let stdout = self.stdout.clone();
-        let stderr = self.stderr.clone();
-        let handle = thread::spawn(move || {
-            let mut eval = Evaluator {
-                global_scope: scope.clone(),
-                current_scope: scope,
-                stdout,
-                stderr,
-                executor: Executor::new(),
-                compact_config: CompactConfig::new(),
-                signal: None,
-                bg_handles: Arc::new(std::sync::Mutex::new(Vec::new())),
-                default_agent: super::DEFAULT_AGENT.to_string(),
-                default_model: String::new(),
-                session_depth: 0,
-                within_stack: Vec::new(),
-                telemetry_ctx: None,
-                script_args: Vec::new(),
-            };
+        let mut eval = self.fork();
+        let (tx, rx) = mpsc::channel();
+        get_pool().execute(move || {
             eval.push_scope();
             let _ = eval.eval_statement(&stmt);
+            let _ = tx.send(());
         });
-        self.bg_handles.lock().unwrap().push(handle);
+        lock_guard(&self.bg_handles).push(rx);
         Ok(super::Value::Int(0))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
     use super::super::*;
     use crate::lang::ast::*;
 
@@ -116,9 +83,9 @@ mod tests {
             })),
         });
 
-        assert_eq!(ev.bg_handles.lock().unwrap().len(), 0);
+        assert_eq!(lock_guard(&ev.bg_handles).len(), 0);
         ev.eval_statement(&background_stmt_node(task)).unwrap();
-        assert_eq!(ev.bg_handles.lock().unwrap().len(), 1);
+        assert_eq!(lock_guard(&ev.bg_handles).len(), 1);
     }
 
     #[test]
@@ -136,10 +103,10 @@ mod tests {
         });
 
         ev.eval_statement(&background_stmt_node(task.clone())).unwrap();
-        assert_eq!(ev.bg_handles.lock().unwrap().len(), 1);
+        assert_eq!(lock_guard(&ev.bg_handles).len(), 1);
 
         ev.eval_statement(&wait_node(None)).unwrap();
-        assert_eq!(ev.bg_handles.lock().unwrap().len(), 0);
+        assert_eq!(lock_guard(&ev.bg_handles).len(), 0);
     }
 
     #[test]

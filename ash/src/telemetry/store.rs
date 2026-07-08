@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
+use crate::AshError;
 use super::event::TelemetryEvent;
 
 pub struct FileStore {
@@ -15,9 +16,9 @@ impl FileStore {
         }
     }
 
-    pub fn reader(&self, offset: u64) -> Result<FileReader, String> {
+    pub fn reader(&self, offset: u64) -> Result<FileReader, AshError> {
         let file = File::open(&self.path)
-            .map_err(|e| format!("failed to open telemetry file: {}", e))?;
+            .map_err(|e| AshError::Msg(format!("failed to open telemetry file: {}", e)))?;
         let mut reader = FileReader {
             reader: BufReader::new(file),
             pos: 0,
@@ -26,7 +27,7 @@ impl FileStore {
             reader
                 .reader
                 .seek_relative(offset as i64)
-                .map_err(|e| format!("failed to seek: {}", e))?;
+                .map_err(|e| AshError::Msg(format!("failed to seek: {}", e)))?;
             reader.pos = offset;
         }
         Ok(reader)
@@ -39,12 +40,12 @@ pub struct FileReader {
 }
 
 impl FileReader {
-    pub fn read_line(&mut self) -> Result<Option<TelemetryEvent>, String> {
+    pub fn read_line(&mut self) -> Result<Option<TelemetryEvent>, AshError> {
         let mut line = String::new();
         let n = self
             .reader
             .read_line(&mut line)
-            .map_err(|e| format!("read error: {}", e))?;
+            .map_err(|e| AshError::Msg(format!("read error: {}", e)))?;
         if n == 0 {
             return Ok(None);
         }
@@ -54,7 +55,7 @@ impl FileReader {
         }
         self.pos += n as u64;
         let value: serde_json::Value =
-            serde_json::from_str(line).map_err(|e| format!("json parse error: {}", e))?;
+            serde_json::from_str(line).map_err(|e| AshError::Msg(format!("json parse error: {}", e)))?;
         let trace_id = value["trace_id"].as_u64().unwrap_or(0);
         let span_id = value["span_id"].as_u64().unwrap_or(0);
         let parent_span_id = value["parent_span_id"].as_u64();

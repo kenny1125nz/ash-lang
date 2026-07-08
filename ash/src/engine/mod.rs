@@ -21,17 +21,19 @@ pub use types::{AgentType, ExecuteRequest, ExecuteResponse};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
+use crate::util::lock_guard;
+
 fn registry() -> &'static Mutex<HashMap<String, Arc<dyn Adapter>>> {
     static REGISTRY: OnceLock<Mutex<HashMap<String, Arc<dyn Adapter>>>> = OnceLock::new();
     REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 pub fn register(name: &str, adapter: Arc<dyn Adapter>) {
-    registry().lock().unwrap().insert(name.to_string(), adapter);
+    lock_guard(registry()).insert(name.to_string(), adapter);
 }
 
 pub fn get(name: &str) -> Option<Arc<dyn Adapter>> {
-    registry().lock().unwrap().get(name).cloned()
+    lock_guard(registry()).get(name).cloned()
 }
 
 /// Build an adapter from an `AgentConfig`.
@@ -68,7 +70,7 @@ pub fn register_defaults() {
 
 /// Print a startup banner showing registered agents and a hint to the website.
 pub fn print_agents_banner() {
-    let reg = registry().lock().unwrap();
+    let reg = lock_guard(registry());
     let names: Vec<String> = reg.keys().map(|k| k.to_string()).collect();
     if !names.is_empty() {
         eprintln!("agents available: {}", names.join(", "));

@@ -504,7 +504,9 @@ impl Lexer {
     }
 }
 
-pub fn tokenize(src: &str) -> Result<Vec<Token>, String> {
+use crate::AshError;
+
+pub fn tokenize(src: &str) -> Result<Vec<Token>, AshError> {
     Ok(Lexer::new(src).tokenize())
 }
 
@@ -520,7 +522,7 @@ pub struct CompactConfigResult {
     pub strategy: String,
 }
 
-pub fn parse_shebang(line: &str) -> Result<ShebangDecl, String> {
+pub fn parse_shebang(line: &str) -> Result<ShebangDecl, AshError> {
     let re = Regex::new(r"^#!\s*(\w[\w.-]*)\s*:\s*(\S+?)(?:\s*:\s*(\S+?))?\s*$").unwrap();
     if let Some(caps) = re.captures(line) {
         Ok(ShebangDecl {
@@ -532,7 +534,7 @@ pub fn parse_shebang(line: &str) -> Result<ShebangDecl, String> {
                 .unwrap_or_default(),
         })
     } else {
-        Err(format!("invalid shebang: {:?}", line))
+        Err(AshError::Msg(format!("invalid shebang: {:?}", line)))
     }
 }
 

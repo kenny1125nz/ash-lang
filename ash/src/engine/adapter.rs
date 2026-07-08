@@ -1,7 +1,9 @@
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Command, Stdio};
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
-use std::thread;
+
+use crate::util::{get_pool, lock_guard};
 
 use log::{debug, info, trace};
 
@@ -68,15 +70,18 @@ impl Adapter for LocalCliAdapter {
         let stdout_buf = Arc::new(Mutex::new(String::new()));
         let stderr_buf = Arc::new(Mutex::new(String::new()));
 
-        let stdout_handle = if let Some(out) = child.stdout.take() {
+        let (stdout_tx, stdout_rx) = mpsc::channel();
+        let (stderr_tx, stderr_rx) = mpsc::channel();
+
+        if let Some(out) = child.stdout.take() {
             let buf = stdout_buf.clone();
-            Some(thread::spawn(move || {
+            get_pool().execute(move || {
                 let reader = BufReader::new(out);
                 for line in reader.lines() {
                     match line {
                         Ok(l) => {
                             trace!("agent stdout: {}", l);
-                            let mut b = buf.lock().unwrap();
+                            let mut b = lock_guard(&buf);
                             b.push_str(&l);
                             b.push('\n');
                             let _ = std::io::stdout().write_all(l.as_bytes());
@@ -86,20 +91,21 @@ impl Adapter for LocalCliAdapter {
                         Err(_) => break,
                     }
                 }
-            }))
+                let _ = stdout_tx.send(());
+            });
         } else {
-            None
-        };
+            let _ = stdout_tx.send(());
+        }
 
-        let stderr_handle = if let Some(err) = child.stderr.take() {
+        if let Some(err) = child.stderr.take() {
             let buf = stderr_buf.clone();
-            Some(thread::spawn(move || {
+            get_pool().execute(move || {
                 let reader = BufReader::new(err);
                 for line in reader.lines() {
                     match line {
                         Ok(l) => {
                             trace!("agent stderr: {}", l);
-                            let mut b = buf.lock().unwrap();
+                            let mut b = lock_guard(&buf);
                             b.push_str(&l);
                             b.push('\n');
                             let _ = std::io::stderr().write_all(l.as_bytes());
@@ -109,10 +115,11 @@ impl Adapter for LocalCliAdapter {
                         Err(_) => break,
                     }
                 }
-            }))
+                let _ = stderr_tx.send(());
+            });
         } else {
-            None
-        };
+            let _ = stderr_tx.send(());
+        }
 
         let exit_code = match child.wait() {
             Ok(status) => status.code().unwrap_or(-1),
@@ -121,15 +128,11 @@ impl Adapter for LocalCliAdapter {
 
         debug!("agent — {} exited with code {}", self.name, exit_code);
 
-        if let Some(h) = stdout_handle {
-            let _ = h.join();
-        }
-        if let Some(h) = stderr_handle {
-            let _ = h.join();
-        }
+        let _ = stdout_rx.recv();
+        let _ = stderr_rx.recv();
 
-        let stdout = stdout_buf.lock().unwrap().clone();
-        let stderr = stderr_buf.lock().unwrap().clone();
+        let stdout = lock_guard(&stdout_buf).clone();
+        let stderr = lock_guard(&stderr_buf).clone();
 
         ExecuteResponse {
             stdout,

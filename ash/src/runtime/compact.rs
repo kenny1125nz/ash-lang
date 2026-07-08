@@ -21,15 +21,17 @@ pub struct Directive {
     pub args: Vec<String>,
 }
 
+use crate::AshError;
+
 impl Directive {
-    pub fn parse(s: &str) -> Result<Directive, String> {
+    pub fn parse(s: &str) -> Result<Directive, AshError> {
         let s = s.trim();
         if s.is_empty() {
-            return Err("empty compact directive".to_string());
+            return Err(AshError::Msg("empty compact directive".to_string()));
         }
         let parts: Vec<String> = s.split_whitespace().map(|p| p.to_string()).collect();
         if parts.is_empty() {
-            return Err("empty compact directive".to_string());
+            return Err(AshError::Msg("empty compact directive".to_string()));
         }
         let action = parts[0].clone();
         let args = parts[1..].to_vec();

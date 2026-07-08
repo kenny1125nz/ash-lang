@@ -1,3 +1,4 @@
+use crate::AshError;
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -59,7 +60,7 @@ impl Value {
         matches!(self, Value::Int(_) | Value::Float(_))
     }
 
-    pub fn add(&self, other: &Value) -> Result<Value, String> {
+    pub fn add(&self, other: &Value) -> Result<Value, AshError> {
         match (self, other) {
             (Value::Array(a), Value::Array(b)) => {
                 let mut result = a.clone();
@@ -73,66 +74,66 @@ impl Value {
             _ if matches!(self, Value::String(_)) || matches!(other, Value::String(_)) => {
                 Ok(Value::String(format!("{}{}", self, other)))
             }
-            _ => Err(format!("+ not supported between {} and {}", self.type_name(), other.type_name())),
+            _ => Err(AshError::Msg(format!("+ not supported between {} and {}", self.type_name(), other.type_name()))),
         }
     }
 
-    pub fn sub(&self, other: &Value) -> Result<Value, String> {
+    pub fn sub(&self, other: &Value) -> Result<Value, AshError> {
         match (self, other) {
             (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a - b)),
             (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a - b)),
             (Value::Int(a), Value::Float(b)) => Ok(Value::Float(*a as f64 - b)),
             (Value::Float(a), Value::Int(b)) => Ok(Value::Float(a - *b as f64)),
-            _ => Err(format!("- not supported between {} and {}", self.type_name(), other.type_name())),
+            _ => Err(AshError::Msg(format!("- not supported between {} and {}", self.type_name(), other.type_name()))),
         }
     }
 
-    pub fn mul(&self, other: &Value) -> Result<Value, String> {
+    pub fn mul(&self, other: &Value) -> Result<Value, AshError> {
         match (self, other) {
             (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a * b)),
             (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a * b)),
             (Value::Int(a), Value::Float(b)) => Ok(Value::Float(*a as f64 * b)),
             (Value::Float(a), Value::Int(b)) => Ok(Value::Float(a * *b as f64)),
-            _ => Err(format!("* not supported between {} and {}", self.type_name(), other.type_name())),
+            _ => Err(AshError::Msg(format!("* not supported between {} and {}", self.type_name(), other.type_name()))),
         }
     }
 
-    pub fn div(&self, other: &Value) -> Result<Value, String> {
+    pub fn div(&self, other: &Value) -> Result<Value, AshError> {
         match (self.as_f64(), other.as_f64()) {
             (Some(a), Some(b)) => {
                 if b == 0.0 {
-                    Err("division by zero".to_string())
+                    Err(AshError::Msg("division by zero".to_string()))
                 } else {
                     Ok(Value::Float(a / b))
                 }
             }
-            _ => Err(format!("/ not supported between {} and {}", self.type_name(), other.type_name())),
+            _ => Err(AshError::Msg(format!("/ not supported between {} and {}", self.type_name(), other.type_name()))),
         }
     }
 
-    pub fn rem(&self, other: &Value) -> Result<Value, String> {
+    pub fn rem(&self, other: &Value) -> Result<Value, AshError> {
         match (self, other) {
             (Value::Int(a), Value::Int(b)) => Ok(Value::Int(a % b)),
             (Value::Float(a), Value::Float(b)) => Ok(Value::Float(a % b)),
             (Value::Int(a), Value::Float(b)) => Ok(Value::Float(*a as f64 % b)),
             (Value::Float(a), Value::Int(b)) => Ok(Value::Float(a % *b as f64)),
-            _ => Err(format!("% not supported between {} and {}", self.type_name(), other.type_name())),
+            _ => Err(AshError::Msg(format!("% not supported between {} and {}", self.type_name(), other.type_name()))),
         }
     }
 
-    pub fn neg(&self) -> Result<Value, String> {
+    pub fn neg(&self) -> Result<Value, AshError> {
         match self {
             Value::Int(i) => Ok(Value::Int(-i)),
             Value::Float(f) => Ok(Value::Float(-f)),
-            _ => Err(format!("- requires numeric operand, got {}", self.type_name())),
+            _ => Err(AshError::Msg(format!("- requires numeric operand, got {}", self.type_name()))),
         }
     }
 
-    pub fn eq(&self, other: &Value) -> Result<Value, String> {
+    pub fn eq(&self, other: &Value) -> Result<Value, AshError> {
         Ok(Value::Bool(self.values_equal(other)))
     }
 
-    pub fn ne(&self, other: &Value) -> Result<Value, String> {
+    pub fn ne(&self, other: &Value) -> Result<Value, AshError> {
         Ok(Value::Bool(!self.values_equal(other)))
     }
 
@@ -151,51 +152,51 @@ impl Value {
         }
     }
 
-    pub fn lt(&self, other: &Value) -> Result<Value, String> {
+    pub fn lt(&self, other: &Value) -> Result<Value, AshError> {
         if let (Some(a), Some(b)) = (self.as_f64(), other.as_f64()) {
             return Ok(Value::Bool(a < b));
         }
         if let (Value::String(a), Value::String(b)) = (self, other) {
             return Ok(Value::Bool(a < b));
         }
-        Err(format!("< not supported between {} and {}", self.type_name(), other.type_name()))
+        Err(AshError::Msg(format!("< not supported between {} and {}", self.type_name(), other.type_name())))
     }
 
-    pub fn gt(&self, other: &Value) -> Result<Value, String> {
+    pub fn gt(&self, other: &Value) -> Result<Value, AshError> {
         if let (Some(a), Some(b)) = (self.as_f64(), other.as_f64()) {
             return Ok(Value::Bool(a > b));
         }
         if let (Value::String(a), Value::String(b)) = (self, other) {
             return Ok(Value::Bool(a > b));
         }
-        Err(format!("> not supported between {} and {}", self.type_name(), other.type_name()))
+        Err(AshError::Msg(format!("> not supported between {} and {}", self.type_name(), other.type_name())))
     }
 
-    pub fn le(&self, other: &Value) -> Result<Value, String> {
+    pub fn le(&self, other: &Value) -> Result<Value, AshError> {
         if let (Some(a), Some(b)) = (self.as_f64(), other.as_f64()) {
             return Ok(Value::Bool(a <= b));
         }
         if let (Value::String(a), Value::String(b)) = (self, other) {
             return Ok(Value::Bool(a <= b));
         }
-        Err(format!("<= not supported between {} and {}", self.type_name(), other.type_name()))
+        Err(AshError::Msg(format!("<= not supported between {} and {}", self.type_name(), other.type_name())))
     }
 
-    pub fn ge(&self, other: &Value) -> Result<Value, String> {
+    pub fn ge(&self, other: &Value) -> Result<Value, AshError> {
         if let (Some(a), Some(b)) = (self.as_f64(), other.as_f64()) {
             return Ok(Value::Bool(a >= b));
         }
         if let (Value::String(a), Value::String(b)) = (self, other) {
             return Ok(Value::Bool(a >= b));
         }
-        Err(format!(">= not supported between {} and {}", self.type_name(), other.type_name()))
+        Err(AshError::Msg(format!(">= not supported between {} and {}", self.type_name(), other.type_name())))
     }
 
-    pub fn len(&self) -> Result<Value, String> {
+    pub fn len(&self) -> Result<Value, AshError> {
         match self {
             Value::String(s) => Ok(Value::Int(s.len() as i64)),
             Value::Array(a) => Ok(Value::Int(a.len() as i64)),
-            _ => Err(format!("len() not supported for {}", self.type_name())),
+            _ => Err(AshError::Msg(format!("len() not supported for {}", self.type_name()))),
         }
     }
 }

@@ -6,6 +6,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::util::lock_guard;
+use crate::AshError;
 use super::config::TelemetryConfig;
 use super::event::TelemetryEvent;
 use super::filter::Filter;
@@ -27,25 +29,25 @@ pub struct Pipeline {
 }
 
 impl Pipeline {
-    pub fn start(config: &TelemetryConfig) -> Result<Self, String> {
+    pub fn start(config: &TelemetryConfig) -> Result<Self, AshError> {
         let filter = Arc::new(Filter::new(config.filter.as_deref()));
         let file_cfg = config
             .file
             .as_ref()
-            .ok_or_else(|| "file config required".to_string())?;
+            .ok_or_else(|| AshError::Msg("file config required".to_string()))?;
         let path = std::path::PathBuf::from(&file_cfg.path);
         let capture_payload = filter.capture_payload;
 
         // Create parent dir if needed
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|e| format!("create dir: {}", e))?;
+            fs::create_dir_all(parent).map_err(|e| AshError::Msg(format!("create dir: {}", e)))?;
         }
 
         let file = OpenOptions::new()
             .create(true)
             .append(true)
             .open(&path)
-            .map_err(|e| format!("open telemetry file: {}", e))?;
+            .map_err(|e| AshError::Msg(format!("open telemetry file: {}", e)))?;
 
         let current_size = file.metadata().map(|m| m.len()).unwrap_or(0);
 
@@ -73,13 +75,12 @@ impl Pipeline {
         let bytes = json.as_bytes();
         let len = bytes.len() as u64;
 
-        let mut writer = self.writer.lock().unwrap();
+        let mut writer = lock_guard(&self.writer);
         let _ = writer.write_all(bytes);
         let _ = writer.write_all(b"\n");
-        // Flush the BufWriter so data lands in the kernel buffer promptly
         let _ = writer.flush();
 
-        let mut size = self.current_size.lock().unwrap();
+        let mut size = lock_guard(&self.current_size);
         *size += len + 1;
         if *size >= self.max_size {
             drop(writer);
@@ -95,8 +96,8 @@ impl Pipeline {
             .append(true)
             .open(&self.path)
             .unwrap();
-        *self.writer.lock().unwrap() = BufWriter::new(file);
-        *self.current_size.lock().unwrap() = 0;
+        *lock_guard(&self.writer) = BufWriter::new(file);
+        *lock_guard(&self.current_size) = 0;
     }
 }
 
@@ -108,7 +109,7 @@ impl Drop for Pipeline {
         if let Some(h) = self.remote_handle.take() {
             let _ = h.join();
         }
-        let _ = self.writer.lock().unwrap().flush();
+        let _ = lock_guard(&self.writer).flush();
     }
 }
 
@@ -116,7 +117,7 @@ fn spawn_remote_consumer(
     config: &TelemetryConfig,
     event_path: &Path,
     global_filter: &Arc<Filter>,
-) -> Result<(Option<Arc<AtomicBool>>, Option<thread::JoinHandle<()>>), String> {
+) -> Result<(Option<Arc<AtomicBool>>, Option<thread::JoinHandle<()>>), AshError> {
     // Find the single enabled remote adapter (kafka, splunk, etc.)
     let remote_config = if let Some(ref k) = config.kafka {
         if k.enabled { Some(k) } else { None }

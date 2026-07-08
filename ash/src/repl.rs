@@ -310,7 +310,7 @@ fn handle_dot_command(cmd: &str, eval: &mut Evaluator) -> Option<i32> {
             println!("Scope cleared.");
         }
         ".vars" => {
-            let vars = eval.current_scope.lock().unwrap().get_all();
+            let vars = crate::util::lock_guard(&eval.current_scope).get_all();
             if vars.is_empty() {
                 println!("(no variables)");
             } else {

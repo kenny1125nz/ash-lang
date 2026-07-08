@@ -1,3 +1,4 @@
+pub mod error;
 pub mod config;
 pub mod lang;
 pub mod runtime;
@@ -7,6 +8,9 @@ pub mod eval;
 pub mod repl;
 pub mod log;
 pub mod telemetry;
+pub mod util;
+
+pub use error::AshError;
 
 #[cfg(test)]
 mod thread_safe_tests {

@@ -1,3 +1,4 @@
+use crate::AshError;
 use std::process::Command;
 
 #[derive(Debug, Clone)]
@@ -14,12 +15,12 @@ impl Executor {
         Self
     }
 
-    pub fn run(&self, cmd: &str) -> Result<ExecResult, String> {
+    pub fn run(&self, cmd: &str) -> Result<ExecResult, AshError> {
         let output = Command::new("bash")
             .arg("-c")
             .arg(cmd)
             .output()
-            .map_err(|e| format!("failed to execute command: {}", e))?;
+            .map_err(|e| AshError::Msg(format!("failed to execute command: {}", e)))?;
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();

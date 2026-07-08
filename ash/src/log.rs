@@ -4,6 +4,8 @@ use std::sync::Mutex;
 
 use log::{Level, LevelFilter, Log, Metadata, Record, SetLoggerError};
 
+use crate::util::lock_guard;
+
 struct AshLogger {
     file: Mutex<std::fs::File>,
     level: LevelFilter,
@@ -25,74 +27,15 @@ impl Log for AshLogger {
             Level::Debug => "debug",
             Level::Trace => "trace",
         };
-        let timestamp = chrono_now();
+        let timestamp = crate::runtime::date::timestamp_now();
         let module = record.module_path().unwrap_or("<unknown>");
-        let mut file = self.file.lock().unwrap();
+        let mut file = lock_guard(&self.file);
         let _ = writeln!(file, "{} [{}] {} — {}", timestamp, level, module, record.args());
     }
 
     fn flush(&self) {
-        let _ = self.file.lock().unwrap().flush();
+        let _ = lock_guard(&self.file).flush();
     }
-}
-
-fn chrono_now() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let d = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default();
-    let secs = d.as_secs();
-    let micros = d.subsec_micros();
-
-    let days = secs / 86400;
-    let time_secs = secs % 86400;
-    let hours = time_secs / 3600;
-    let minutes = (time_secs % 3600) / 60;
-    let seconds = time_secs % 60;
-
-    let mut y = 1970i64;
-    let mut remaining = days as i64;
-
-    loop {
-        let days_in_year = if is_leap(y) { 366 } else { 365 };
-        if remaining < days_in_year {
-            break;
-        }
-        remaining -= days_in_year;
-        y += 1;
-    }
-
-    let month_days = if is_leap(y) {
-        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    } else {
-        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    };
-
-    let mut m = 0usize;
-    for (i, &md) in month_days.iter().enumerate() {
-        if remaining < md {
-            m = i;
-            break;
-        }
-        remaining -= md;
-    }
-
-    let day = remaining + 1;
-
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:06}Z",
-        y,
-        m + 1,
-        day,
-        hours,
-        minutes,
-        seconds,
-        micros
-    )
-}
-
-fn is_leap(year: i64) -> bool {
-    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
 }
 
 fn parse_level(s: &str) -> LevelFilter {

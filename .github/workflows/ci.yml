@@ -127,8 +127,8 @@ jobs:
           cd ash-wasm
           wasm-pack build --target web --release
           mkdir -p ../web-site/wasm
-          cp pkg/ash_wasm.js ../web-site/wasm/ash.js
           cp pkg/ash_wasm_bg.wasm ../web-site/wasm/ash_wasm_bg.wasm
+          cp pkg/ash_wasm_bg.js ../web-site/wasm/ash_wasm_bg.js
       - name: Deploy to Cloudflare Pages
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

@@ -1,3 +1,4 @@
+use crate::AshError;
 use crate::lang::ast::{InterpSpan, InterpType};
 use crate::runtime::value::Value;
 use regex::Regex;
@@ -8,8 +9,8 @@ impl Interpolation {
     pub fn resolve(
         s: &str,
         get_var: impl Fn(&str) -> Option<String>,
-        exec_cmd: impl Fn(&str) -> Result<String, String>,
-    ) -> Result<String, String> {
+        exec_cmd: impl Fn(&str) -> Result<String, AshError>,
+    ) -> Result<String, AshError> {
         let mut s = s.to_string();
 
         let mut idx = s.find("\\$");
@@ -44,8 +45,8 @@ impl Interpolation {
     pub fn resolve_spans(
         interps: &[InterpSpan],
         get_var: &dyn Fn(&str) -> Option<Value>,
-        exec_cmd: &dyn Fn(&str) -> Result<String, String>,
-    ) -> Result<String, String> {
+        exec_cmd: &dyn Fn(&str) -> Result<String, AshError>,
+    ) -> Result<String, AshError> {
         let mut result = String::new();
         for span in interps {
             match &span.typ {
@@ -53,7 +54,7 @@ impl Interpolation {
                     match get_var(name) {
                         Some(val) => result.push_str(&format!("{}", val)),
                         None => {
-                            return Err(format!("undefined variable: {}", name));
+                            return Err(AshError::Msg(format!("undefined variable: {}", name)));
                         }
                     }
                 }
@@ -75,8 +76,8 @@ mod tests {
         None
     }
 
-    fn no_cmd(_: &str) -> Result<String, String> {
-        Err("no command execution".to_string())
+    fn no_cmd(_: &str) -> Result<String, AshError> {
+        Err(AshError::Msg("no command execution".to_string()))
     }
 
     fn test_var(name: &str) -> Option<String> {
@@ -87,10 +88,10 @@ mod tests {
         }
     }
 
-    fn test_cmd(cmd: &str) -> Result<String, String> {
+    fn test_cmd(cmd: &str) -> Result<String, AshError> {
         match cmd {
             "echo hello" => Ok("hello\n".to_string()),
-            _ => Err(format!("unknown command: {}", cmd)),
+            _ => Err(AshError::Msg(format!("unknown command: {}", cmd))),
         }
     }
 

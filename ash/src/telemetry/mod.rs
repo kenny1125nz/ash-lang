@@ -9,6 +9,7 @@ pub mod store;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
+use crate::AshError;
 use config::TelemetryConfig;
 use context::SpanContext;
 use event::{EventKind, TelemetryEvent};
@@ -17,13 +18,13 @@ use pipeline::Pipeline;
 static INSTANCE: OnceLock<Mutex<Option<Pipeline>>> = OnceLock::new();
 static CAPTURE_PAYLOAD: AtomicBool = AtomicBool::new(false);
 
-pub fn init(config: TelemetryConfig) -> Result<(), String> {
+pub fn init(config: TelemetryConfig) -> Result<(), AshError> {
     let pipeline = Pipeline::start(&config)?;
     CAPTURE_PAYLOAD.store(pipeline.capture_payload, Ordering::Relaxed);
 
     INSTANCE
         .set(Mutex::new(Some(pipeline)))
-        .map_err(|_| "telemetry already initialized".to_string())
+        .map_err(|_| AshError::Msg("telemetry already initialized".to_string()))
 }
 
 pub fn emit(ctx: SpanContext, kind: EventKind, payload: serde_json::Value) {

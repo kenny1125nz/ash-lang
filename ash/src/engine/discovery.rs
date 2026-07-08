@@ -26,7 +26,7 @@ pub struct DiscoveryResult {
 pub fn discover() -> DiscoveryResult {
     eprintln!("discovering agents available...");
     let catalog = catalog::embedded_catalog();
-    let timestamp = chrono_now();
+    let timestamp = crate::runtime::date::timestamp_now();
     let mut agents: Vec<DiscoveredAgent> = Vec::new();
 
     // Pre-collect owned data to avoid borrowing catalog across thread boundaries
@@ -242,54 +242,3 @@ fn probe_capabilities(path: &str, name: &str) -> (bool, bool) {
     (has_model, has_session)
 }
 
-fn chrono_now() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let d = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default();
-    let secs = d.as_secs();
-    let nanos = d.subsec_nanos();
-    // Format: YYYY-MM-DDTHH:MM:SS.fffffffffZ — same style as the log.rs formatter
-    let secs_per_day: u64 = 86400;
-    let days = secs / secs_per_day;
-    let day_secs = secs % secs_per_day;
-    let hours = day_secs / 3600;
-    let minutes = (day_secs % 3600) / 60;
-    let seconds = day_secs % 60;
-    // Days since epoch: Jan 1, 1970
-    let mut y = 1970i64;
-    let mut d = days as i64;
-    loop {
-        let days_in_year = if is_leap(y) { 366 } else { 365 };
-        if d < days_in_year {
-            break;
-        }
-        d -= days_in_year;
-        y += 1;
-    }
-    let month_days = if is_leap(y) {
-        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    } else {
-        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
-    };
-    let mut m = 0usize;
-    for days_in_m in &month_days {
-        if d < *days_in_m {
-            break;
-        }
-        d -= *days_in_m;
-        m += 1;
-    }
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:09}Z",
-        y,
-        m + 1,
-        d + 1,
-        hours,
-        minutes,
-        seconds,
-        nanos
-    )
-}
-
-fn is_leap(y: i64) -> bool {
-    (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
-}

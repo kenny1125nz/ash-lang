@@ -604,18 +604,53 @@ session end
 print "  session + compact works"
 
 # ---------------------------------------------------------------------------
-# 61. Eval try — error variable set on body failure
+# 61. Eval try — stderr variable from body
 # ---------------------------------------------------------------------------
-print "=== 61. Error variable on body failure ==="
+print "=== 61. Stderr variable from body ==="
 try {
-  exec sh -c "exit 1"
+  exec sh -c "echo error-output >&2 && exit 1"
 } evaluate with {
   false
 } accept {
   print "  FAIL: body failed, should not accept"
 } partial {
-  print "  partial: error=${error}"
+  print "  partial: stderr=${stderr}"
+} fail {
+  print "  fail: stderr=${stderr}"
+} upto 2
+print "  stderr was: ${stderr}"
+
+# ---------------------------------------------------------------------------
+# 62. Eval try — error variable set on body EvalError
+# ---------------------------------------------------------------------------
+print "=== 62. Eval try error variable on body EvalError ==="
+try {
+  exit 1
+} evaluate with {
+  true
+} accept {
+  print "  FAIL: body errored, should not accept"
+} partial {
+  print "  FAIL: body errored, should not reach partial"
 } fail {
   print "  fail: error=${error}"
 } upto 2
-print "  error was: ${error}"
+print "  done"
+
+# ---------------------------------------------------------------------------
+# 63. Eval try — report variable from evaluator output
+# ---------------------------------------------------------------------------
+print "=== 63. Eval try report variable from evaluator ==="
+try {
+  print "body executed"
+} evaluate with {
+  print "evaluator output here"
+  false
+} accept {
+  print "  FAIL: evaluator returned false, should not accept"
+} partial {
+  print "  partial: report=${report}"
+} fail {
+  print "  fail: report=${report}"
+} upto 2
+print "  done"

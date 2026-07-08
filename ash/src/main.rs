@@ -6,6 +6,7 @@ use ash::eval::{EvalError, Evaluator};
 use ash::lang::ast::{Node, Script};
 use ash::lang::parser::parse_str;
 use ash::runtime::tree::{self, ParallelMode, WalkConfig};
+use ash::AshError;
 
 use log::info;
 
@@ -127,7 +128,7 @@ fn resolve_config_path(custom: Option<&str>) -> Option<std::path::PathBuf> {
     None
 }
 
-fn validate_agents(script: &Script, config_path: Option<&str>) -> Result<(), String> {
+fn validate_agents(script: &Script, config_path: Option<&str>) -> Result<(), AshError> {
     let mut used_agents = HashSet::new();
     collect_agent_names(&script.body, &mut used_agents);
 
@@ -160,7 +161,7 @@ fn validate_agents(script: &Script, config_path: Option<&str>) -> Result<(), Str
     let configured = match ash::config::read_config(&config_path_str) {
         Ok((agents, _)) => agents.into_iter().map(|a| a.name).collect::<HashSet<_>>(),
         Err(e) => {
-            return Err(format!("failed to read {}: {}", config_path_str, e));
+            return Err(AshError::Msg(format!("failed to read {}: {}", config_path_str, e)));
         }
     };
 
@@ -172,7 +173,7 @@ fn validate_agents(script: &Script, config_path: Option<&str>) -> Result<(), Str
     }
 
     if !unknown.is_empty() {
-        return Err(format!(
+        return Err(AshError::Msg(format!(
             "agents not configured in {}: {}\n\
              hint: add them under the 'agents:' section, e.g.:\n\
              agents:\n\
@@ -180,7 +181,7 @@ fn validate_agents(script: &Script, config_path: Option<&str>) -> Result<(), Str
             config_path_str,
             unknown.iter().map(|s| format!("'{}'", s)).collect::<Vec<_>>().join(", "),
             unknown.iter().map(|s| format!("  {}:\n    type: local-cli\n    cmd: <binary>\n", s)).collect::<Vec<_>>().join("")
-        ));
+        )));
     }
 
     Ok(())

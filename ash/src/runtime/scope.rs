@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::lang::ast::FnDecl;
 use crate::runtime::value::Value;
+use crate::util::lock_guard;
 
 pub type ScopeRef = Arc<Mutex<Scope>>;
 
@@ -21,7 +22,7 @@ impl Scope {
         };
         let ref_ = Arc::new(Mutex::new(scope));
         {
-            let mut s = ref_.lock().unwrap();
+            let mut s = lock_guard(&ref_);
             s.variables.insert("?".to_string(), Value::Int(0));
             s.variables.insert("stdout".to_string(), Value::String(String::new()));
             s.variables.insert("stderr".to_string(), Value::String(String::new()));
@@ -43,7 +44,7 @@ impl Scope {
             Some(v) => Some(v.clone()),
             None => {
                 if let Some(ref parent) = self.parent {
-                    parent.lock().unwrap().get(name)
+                    lock_guard(parent).get(name)
                 } else {
                     None
                 }
@@ -54,7 +55,7 @@ impl Scope {
     pub fn set(&mut self, name: &str, value: Value) {
         if let Some(ref parent) = self.parent {
             if !self.variables.contains_key(name) {
-                parent.lock().unwrap().set(name, value);
+                lock_guard(parent).set(name, value);
                 return;
             }
         }
@@ -78,7 +79,7 @@ impl Scope {
             Some(f) => Some(f.clone()),
             None => {
                 if let Some(ref parent) = self.parent {
-                    parent.lock().unwrap().get_function(name)
+                    lock_guard(parent).get_function(name)
                 } else {
                     None
                 }

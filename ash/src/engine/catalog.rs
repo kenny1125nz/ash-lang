@@ -1,6 +1,7 @@
 /// Agent catalog — embedded source of truth for known agent definitions.
 use serde::Deserialize;
 
+use crate::AshError;
 use crate::engine::config::{AgentConfig, ApiEndpoint, ContainerConfig};
 use crate::engine::types::AgentType;
 
@@ -71,9 +72,9 @@ impl AgentEntry {
     }
 }
 
-fn parse_catalog_json(json: &str) -> Result<Vec<AgentEntry>, String> {
+fn parse_catalog_json(json: &str) -> Result<Vec<AgentEntry>, AshError> {
     let raw: Vec<CatalogEntry> =
-        serde_json::from_str(json).map_err(|e| format!("catalog parse error: {}", e))?;
+        serde_json::from_str(json).map_err(|e| AshError::Msg(format!("catalog parse error: {}", e)))?;
     Ok(raw
         .into_iter()
         .map(|e| AgentEntry {

@@ -1,3 +1,4 @@
+use std::fmt;
 use std::fs;
 use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
@@ -5,9 +6,11 @@ use std::path::{Path, PathBuf};
 use log::{debug, info, warn};
 
 use crate::engine::{self, ExecuteRequest, ExecuteResponse};
-use crate::eval::{EvalError, Evaluator};
-use crate::runtime::interpolation::Interpolation;
+use crate::lang::ast::Script;
 use crate::lang::parser::parse_str;
+use crate::runtime::interpolation::Interpolation;
+use crate::runtime::scope::ScopeRef;
+use crate::AshError;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TaskKind {
@@ -66,6 +69,31 @@ impl Default for WalkConfig {
             parallel: ParallelMode::Prompt,
         }
     }
+}
+
+#[derive(Debug)]
+pub enum ExecError {
+    Exit(i32),
+    Msg(String),
+}
+
+impl fmt::Display for ExecError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ExecError::Exit(code) => write!(f, "exit code {}", code),
+            ExecError::Msg(s) => write!(f, "{}", s),
+        }
+    }
+}
+
+/// Trait that abstracts over the concrete Evaluator, breaking the
+/// circular dependency between runtime (tree walker) and eval.
+pub trait TaskExecutor: Send + Sync {
+    fn fork(&self) -> Box<dyn TaskExecutor + Send>;
+    fn eval_script(&mut self, script: &Script) -> Result<(), ExecError>;
+    fn set_default_agent(&mut self, name: &str);
+    fn set_default_model(&mut self, name: &str);
+    fn current_scope(&self) -> ScopeRef;
 }
 
 fn extract_numeric_prefix(name: &str) -> Option<u64> {
@@ -210,13 +238,13 @@ fn read_task(file_path: &Path, content: &str) -> Option<Task> {
     })
 }
 
-fn walk_dir(dir: &Path) -> Result<Vec<TaskGroup>, String> {
+fn walk_dir(dir: &Path) -> Result<Vec<TaskGroup>, AshError> {
     let mut groups: Vec<TaskGroup> = Vec::new();
     walk_dir_into(dir, &mut groups, dir)?;
     Ok(groups)
 }
 
-fn walk_dir_into(dir: &Path, groups: &mut Vec<TaskGroup>, root: &Path) -> Result<(), String> {
+fn walk_dir_into(dir: &Path, groups: &mut Vec<TaskGroup>, root: &Path) -> Result<(), AshError> {
     let entries = match fs::read_dir(dir) {
         Ok(e) => e,
         Err(_) => return Ok(()),
@@ -381,7 +409,7 @@ fn confirm_parallel(group_count: usize) -> bool {
     input.trim().eq_ignore_ascii_case("y")
 }
 
-fn execute_md_task(task: &Task, config: &WalkConfig, eval: &mut Evaluator) -> bool {
+fn execute_md_task(task: &Task, config: &WalkConfig, eval: &mut dyn TaskExecutor) -> bool {
     let agent_name = task.agent.as_deref().unwrap_or(&config.default_agent);
     let agent = engine::get(agent_name);
     let model = task.model.as_deref().unwrap_or(&config.default_model);
@@ -414,7 +442,7 @@ fn execute_md_task(task: &Task, config: &WalkConfig, eval: &mut Evaluator) -> bo
     }
 }
 
-fn execute_ash_task(task: &Task, _config: &WalkConfig, eval: &mut Evaluator) -> bool {
+fn execute_ash_task(task: &Task, _config: &WalkConfig, eval: &mut dyn TaskExecutor) -> bool {
     let script = match parse_str(&task.content) {
         Ok(s) => s,
         Err(e) => {
@@ -435,22 +463,22 @@ fn execute_ash_task(task: &Task, _config: &WalkConfig, eval: &mut Evaluator) -> 
             eprintln!("  [ok]");
             true
         }
-        Err(EvalError::Exit(ex)) if ex.code == 0 => {
+        Err(ExecError::Exit(0)) => {
             eprintln!("  [ok]");
             true
         }
-        Err(EvalError::Exit(ex)) => {
-            eprintln!("  [fail] exit={}", ex.code);
+        Err(ExecError::Exit(code)) => {
+            eprintln!("  [fail] exit={}", code);
             false
         }
-        Err(EvalError::Msg(e)) => {
+        Err(ExecError::Msg(e)) => {
             eprintln!("  [fail] {}", e);
             false
         }
     }
 }
 
-fn execute_task(task: &Task, config: &WalkConfig, eval: &mut Evaluator) -> bool {
+fn execute_task(task: &Task, config: &WalkConfig, eval: &mut dyn TaskExecutor) -> bool {
     let rel_path = task.path.strip_prefix(&config.root).unwrap_or(&task.path);
     debug!("tree — executing {} (kind={:?})", rel_path.display(), task.kind);
     match task.kind {
@@ -459,25 +487,9 @@ fn execute_task(task: &Task, config: &WalkConfig, eval: &mut Evaluator) -> bool 
     }
 }
 
-fn execute_task_isolated(task: &Task, config: &WalkConfig, parent_eval: &Evaluator) -> bool {
-    let scope = parent_eval.current_scope.clone();
-    let mut eval = Evaluator {
-        current_scope: scope.clone(),
-        global_scope: parent_eval.global_scope.clone(),
-        stdout: parent_eval.stdout.clone(),
-        stderr: parent_eval.stderr.clone(),
-        executor: crate::runtime::executor::Executor::new(),
-        compact_config: parent_eval.compact_config.clone(),
-        signal: parent_eval.signal.clone(),
-        bg_handles: parent_eval.bg_handles.clone(),
-        default_agent: parent_eval.default_agent.clone(),
-        default_model: parent_eval.default_model.clone(),
-        session_depth: 0,
-        within_stack: Vec::new(),
-        telemetry_ctx: None,
-        script_args: Vec::new(),
-    };
-    execute_task(task, config, &mut eval)
+fn execute_task_isolated(task: &Task, config: &WalkConfig, parent_eval: &dyn TaskExecutor) -> bool {
+    let mut eval = parent_eval.fork();
+    execute_task(task, config, &mut *eval)
 }
 
 fn dry_run_group(group: &TaskGroup, index: usize, total: usize, config: &WalkConfig) {
@@ -554,29 +566,42 @@ fn has_parallel_work(group: &TaskGroup) -> bool {
     group.files.len() > 1 || group.subdir.is_some()
 }
 
+fn execute_group_parallel<'a>(
+    group: &'a TaskGroup,
+    config: &WalkConfig,
+    parent_eval: &dyn TaskExecutor,
+) -> Vec<(bool, Option<&'a Task>)> {
+    std::thread::scope(|s| {
+        let mut handles: Vec<std::thread::ScopedJoinHandle<'_, (bool, Option<&'a Task>)>> = Vec::new();
+
+        for task in &group.files {
+            let handle = s.spawn(move || {
+                let ok = execute_task_isolated(task, config, parent_eval);
+                (ok, Some(task))
+            });
+            handles.push(handle);
+        }
+
+        if let Some(ref subdir_groups) = group.subdir {
+            let handle = s.spawn(move || {
+                let mut sub_results = Vec::new();
+                execute_groups_isolated(subdir_groups, config, parent_eval, &mut sub_results);
+                (sub_results.iter().all(|(ok, _)| *ok), None)
+            });
+            handles.push(handle);
+        }
+
+        handles.into_iter().map(|h| h.join().unwrap_or((false, None))).collect()
+    })
+}
+
 fn execute_groups_isolated<'a>(
     groups: &'a [TaskGroup],
     config: &WalkConfig,
-    parent_eval: &Evaluator,
+    parent_eval: &dyn TaskExecutor,
     result: &mut Vec<(bool, Option<&'a Task>)>,
 ) {
-    let scope = parent_eval.current_scope.clone();
-    let mut eval = Evaluator {
-        current_scope: scope.clone(),
-        global_scope: parent_eval.global_scope.clone(),
-        stdout: parent_eval.stdout.clone(),
-        stderr: parent_eval.stderr.clone(),
-        executor: crate::runtime::executor::Executor::new(),
-        compact_config: parent_eval.compact_config.clone(),
-        signal: parent_eval.signal.clone(),
-        bg_handles: parent_eval.bg_handles.clone(),
-        default_agent: parent_eval.default_agent.clone(),
-        default_model: parent_eval.default_model.clone(),
-        session_depth: 0,
-        within_stack: Vec::new(),
-        telemetry_ctx: None,
-        script_args: Vec::new(),
-    };
+    let mut eval = parent_eval.fork();
 
     for group in groups {
         if group.files.is_empty() && group.subdir.is_none() {
@@ -584,29 +609,10 @@ fn execute_groups_isolated<'a>(
         }
 
         if group.files.len() == 1 && group.subdir.is_none() {
-            let ok = execute_task(&group.files[0], config, &mut eval);
+            let ok = execute_task(&group.files[0], config, &mut *eval);
             result.push((ok, Some(&group.files[0])));
         } else if has_parallel_work(group) {
-            let results: Vec<(bool, Option<&'a Task>)> = std::thread::scope(|s| {
-                let mut handles: Vec<std::thread::ScopedJoinHandle<'_, (bool, Option<&'a Task>)>> = Vec::new();
-                for task in &group.files {
-                    let handle = s.spawn(move || {
-                        let ok = execute_task_isolated(task, config, parent_eval);
-                        (ok, Some(task))
-                    });
-                    handles.push(handle);
-                }
-                if let Some(ref subdir_groups) = group.subdir {
-                    let handle = s.spawn(move || {
-                        let mut sub_results = Vec::new();
-                        execute_groups_isolated(subdir_groups, config, parent_eval, &mut sub_results);
-                        (sub_results.iter().all(|(ok, _)| *ok), None)
-                    });
-                    handles.push(handle);
-                }
-                handles.into_iter().map(|h| h.join().unwrap_or((false, None))).collect()
-            });
-
+            let results = execute_group_parallel(group, config, parent_eval);
             for (ok, maybe_task) in results {
                 result.push((ok, maybe_task));
             }
@@ -614,7 +620,7 @@ fn execute_groups_isolated<'a>(
     }
 }
 
-pub fn run_tree(config: WalkConfig, eval: &mut Evaluator) -> i32 {
+pub fn run_tree(config: WalkConfig, eval: &mut dyn TaskExecutor) -> i32 {
     info!("engine — walking task tree at {}", config.root.display());
 
     let groups = match walk_dir(&config.root) {
@@ -702,34 +708,7 @@ pub fn run_tree(config: WalkConfig, eval: &mut Evaluator) -> i32 {
                 warn!("parallel group has tasks with on_fail=stop — failures will stop the entire run");
             }
 
-            let config_ref: &WalkConfig = &config;
-            let eval_ref: &Evaluator = &*eval;
-            let mut results = Vec::new();
-            std::thread::scope(|s| {
-                let mut handles: Vec<std::thread::ScopedJoinHandle<'_, (bool, Option<&Task>)>> = Vec::new();
-
-                for task in &group.files {
-                    let handle = s.spawn(move || {
-                        let ok = execute_task_isolated(task, config_ref, eval_ref);
-                        (ok, Some(task))
-                    });
-                    handles.push(handle);
-                }
-
-                if let Some(ref subdir_groups) = group.subdir {
-                    let handle = s.spawn(move || {
-                        let mut sub_results = Vec::new();
-                        execute_groups_isolated(subdir_groups, config_ref, eval_ref, &mut sub_results);
-                        let all_ok = sub_results.iter().all(|(ok, _)| *ok);
-                        (all_ok, None)
-                    });
-                    handles.push(handle);
-                }
-
-                for h in handles {
-                    results.push(h.join().unwrap_or((false, None)));
-                }
-            });
+            let results = execute_group_parallel(group, &config, eval);
 
             for (ok, maybe_task) in results {
                 if ok {
@@ -742,7 +721,6 @@ pub fn run_tree(config: WalkConfig, eval: &mut Evaluator) -> i32 {
                             return 1;
                         }
                     } else {
-                        // One of the parallel tasks failed
                         if !config.continue_on_error {
                             eprintln!("stopping after failure ({} passed, {} failed)", passed, failed);
                             return 1;
@@ -761,8 +739,8 @@ pub fn run_tree(config: WalkConfig, eval: &mut Evaluator) -> i32 {
     }
 }
 
-fn interpolate_prompt(prompt: &str, eval: &Evaluator) -> String {
-    let scope = eval.current_scope.clone();
+fn interpolate_prompt(prompt: &str, eval: &dyn TaskExecutor) -> String {
+    let scope = eval.current_scope();
     Interpolation::resolve(
         prompt,
         move |name| {
