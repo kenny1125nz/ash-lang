@@ -48,29 +48,6 @@ try {
 } upto 3
 ```
 
-Eval try — evaluates a condition after each attempt:
-
-```ash
-try {
-  do "Generate report"
-} evaluate with {
-  SCORE >= 85
-} accept {
-  print "quality threshold met"
-} partial {
-  print "attempt ${ATTEMPT} below threshold, retrying"
-} fail {
-  print "unexpected error"
-} upto 5
-```
-
-| Clause | Runs when |
-|--------|-----------|
-| `accept` | Evaluator returns truthy / `$?` == 0 |
-| `partial` | Evaluator returns falsy / `$?` == 1 |
-| `fail` | Body errors or evaluator `$?` >= 2 |
-| `upto N` | Maximum retry count |
-
 ### Evaluate blocks
 
 `evaluate` is a top-level statement that runs a body, evaluates the result using an external evaluator (agent, function, or command), and retries until a numeric score threshold is met or attempts are exhausted.

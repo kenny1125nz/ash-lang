@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { marked } = require('marked');
 
 const ROOT = path.resolve(__dirname, '..');
 const UNITS_DIR = path.join(ROOT, 'docs', 'units');
@@ -118,11 +119,14 @@ function readTargets() {
       continue;
     }
 
-    const requiredFields = ['output', 'title', 'units', 'footer'];
+    const requiredFields = ['output', 'title', 'units'];
     for (const field of requiredFields) {
       if (!(field in config)) {
         error(`${filePath}: missing required field "${field}"`);
       }
+    }
+    if (!('template' in config) && !('footer' in config)) {
+      error(`${filePath}: must specify either "template" or "footer"`);
     }
 
     if (!Array.isArray(config.units)) {
@@ -164,7 +168,12 @@ function validateOutputPaths(targets) {
         error(`output path "${config.output}": parent directory "${path.relative(ROOT, parentDir)}" does not exist`);
       }
     } catch {
-      error(`output path "${config.output}": parent directory "${path.relative(ROOT, parentDir)}" does not exist`);
+      // If parent doesn't exist, try creating it (for web-site/ outputs)
+      try {
+        fs.mkdirSync(parentDir, { recursive: true });
+      } catch {
+        error(`output path "${config.output}": parent directory "${path.relative(ROOT, parentDir)}" does not exist and could not be created`);
+      }
     }
   }
 }
@@ -216,31 +225,65 @@ function assemble() {
   }
 
   for (const { config } of targets) {
-    const title = config.title || '';
+    const outputPath = path.resolve(ROOT, config.output);
     const footer = config.footer || '';
-    const unitBodies = (config.units || [])
-      .filter(id => units[id])
-      .map(id => units[id].body)
-      .filter(body => body.length > 0);
 
-    const parts = [title];
-    if (title && unitBodies.length > 0) {
-      const titleEndsNewline = title.endsWith('\n');
-      if (!titleEndsNewline) {
+    if (config.template) {
+      // --- HTML output ---
+      const templatePath = path.resolve(ROOT, config.template);
+      if (!fs.existsSync(templatePath)) {
+        error(`template not found: ${config.template}`);
+        continue;
+      }
+      let template = fs.readFileSync(templatePath, 'utf-8');
+
+      const title = config.title || '';
+      const titleHtml = title ? marked.parse(title) : '';
+      const titleText = title
+        .replace(/^#+\s*/gm, '')
+        .split('\n')[0]
+        .trim();
+
+      const unitBodies = (config.units || [])
+        .filter(id => units[id])
+        .map(id => units[id].body)
+        .filter(body => body.length > 0);
+
+      const contentMd = unitBodies.join('\n\n');
+      const contentHtml = marked.parse(contentMd);
+
+      let html = template.replace('{{TITLE}}', titleText);
+      html = html.replace('{{HERO}}', titleHtml);
+      html = html.replace('{{CONTENT}}', contentHtml);
+
+      fs.writeFileSync(outputPath, html, 'utf-8');
+      process.stdout.write(`wrote: ${config.output} (html)\n`);
+    } else {
+      // --- Markdown output ---
+      const title = config.title || '';
+      const unitBodies = (config.units || [])
+        .filter(id => units[id])
+        .map(id => units[id].body)
+        .filter(body => body.length > 0);
+
+      const parts = [title];
+      if (title && unitBodies.length > 0) {
+        const titleEndsNewline = title.endsWith('\n');
+        if (!titleEndsNewline) {
+          parts.push('\n');
+        }
+      }
+      parts.push(unitBodies.join('\n\n'));
+      if (unitBodies.length > 0 && footer) {
         parts.push('\n');
       }
-    }
-    parts.push(unitBodies.join('\n\n'));
-    if (unitBodies.length > 0 && footer) {
-      parts.push('\n');
-    }
-    parts.push(footer);
+      parts.push(footer);
 
-    const output = parts.join('').replace(/\n{3,}/g, '\n\n');
+      const output = parts.join('').replace(/\n{3,}/g, '\n\n');
 
-    const outputPath = path.resolve(ROOT, config.output);
-    fs.writeFileSync(outputPath, output, 'utf-8');
-    process.stdout.write(`wrote: ${config.output}\n`);
+      fs.writeFileSync(outputPath, output, 'utf-8');
+      process.stdout.write(`wrote: ${config.output}\n`);
+    }
   }
 
   for (const w of warnings) {

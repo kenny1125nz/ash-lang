@@ -154,6 +154,7 @@ impl Parser {
                 "include" => self.parse_include(),
                 "compact" => self.parse_compact_stmt(),
                 "session" => self.parse_session(),
+                "use" => self.parse_use(),
                 "return" => self.parse_return(),
                 "break" => self.parse_break(),
                 "continue" => self.parse_continue(),
@@ -956,6 +957,15 @@ impl Parser {
         }))
     }
 
+    fn parse_use(&mut self) -> Result<Node, String> {
+        let tok = self.advance();
+        let agent = self.parse_hyphenated_ident()?;
+        Ok(Node::UseAgent(UseAgent {
+            pos: Pos { line: tok.line, col: tok.col },
+            agent,
+        }))
+    }
+
     fn parse_env(&mut self) -> Result<Node, String> {
         let tok = self.advance();
         let key_tok = self.expect(TokenKind::TkIdent)?;
@@ -1734,6 +1744,24 @@ mod tests {
             let tokens = crate::lang::lexer::tokenize(src).unwrap();
             let result = parse(tokens);
             assert!(result.is_err(), "expected parse error for {:?}", src);
+        }
+    }
+
+    #[test]
+    fn test_parse_use_agent() {
+        let script = parse_str("use opencode");
+        match &script.body[0] {
+            Node::UseAgent(u) => assert_eq!(u.agent, "opencode"),
+            other => panic!("expected UseAgent, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_use_agent_hyphenated() {
+        let script = parse_str("use claude-code");
+        match &script.body[0] {
+            Node::UseAgent(u) => assert_eq!(u.agent, "claude-code"),
+            other => panic!("expected UseAgent, got {:?}", other),
         }
     }
 }

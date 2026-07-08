@@ -99,17 +99,33 @@ Declare the agent with a shebang:
 do "Review src/" with opencode
 ```
 
+### Default agent
+
+Set the default agent for all subsequent `do` calls with `use`:
+
+```ash
+use opencode
+do "Review src/"                # uses opencode
+
+use claude-code
+do "Refactor the implementation" # uses claude-code
+```
+
+The agent can still be overridden per-call with `do "..." with <agent>`.
+
 ### Language overview
 
 ```ash
-do "Review src/" with opencode      # call an agent
+use opencode                             # set default agent
 
-fn rollback(FILE) {                  # functions
+do "Review src/"                         # call an agent
+
+fn rollback(FILE) {                      # functions
   exec git restore "${FILE}"
   do "Summarize what has been done"
 }
 
-for FILE in FILES {                  # loops, conditionals, retry
+for FILE in FILES {                      # loops, conditionals, retry
   try {
     do "Fix bugs in ${FILE}"
   } fail {

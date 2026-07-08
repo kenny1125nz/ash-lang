@@ -8,6 +8,7 @@
 |-----------|-------------|
 | `exec cmd` | Run a shell command |
 | `evaluate { } by ... accept by ... upto N` | Retry body until a score threshold is met, evaluated by an agent/function/command |
+| `use <agent>` | Set the default agent for subsequent `do` calls |
 | `print msg` | Print output |
 | `include "file.ash"` | Load another ash script |
 | `env KEY` | Read an environment variable |

@@ -43,6 +43,8 @@ const fs = __importStar(require("fs"));
 let outputChannel;
 let runningProcess = null;
 let binaryPath = null;
+let diagnosticCollection;
+const ERROR_RE = /^parse error: (.+) at (\d+):(\d+)$/;
 const INSTALL_INSTRUCTIONS = "Install via npm: npm i -g @ash-lang/cli  |  GitHub Releases: https://github.com/kenny1125nz/ash-lang/releases";
 function resolveBinaryPath(extensionPath) {
     const whichCmd = os.platform() === "win32" ? "where" : "which";
@@ -147,9 +149,33 @@ function stopRunningProcess() {
     outputChannel.appendLine("\u2500\u2500 Script stopped by user \u2500\u2500");
     runningProcess = null;
 }
+function validateDocument(document) {
+    if (!binaryPath || document.languageId !== "ash")
+        return;
+    const uri = document.uri;
+    const filePath = uri.fsPath;
+    const cwd = path.dirname(filePath);
+    child_process.execFile(binaryPath, ["--check", filePath], { cwd, timeout: 10000 }, (err, _stdout, stderr) => {
+        const diagnostics = [];
+        if (err && stderr) {
+            for (const line of stderr.split("\n")) {
+                const m = line.match(ERROR_RE);
+                if (m) {
+                    const message = m[1];
+                    const lineNum = parseInt(m[2], 10);
+                    const colNum = parseInt(m[3], 10);
+                    const range = new vscode.Range(lineNum, colNum, lineNum, colNum + 1);
+                    diagnostics.push(new vscode.Diagnostic(range, message, vscode.DiagnosticSeverity.Error));
+                }
+            }
+        }
+        diagnosticCollection.set(uri, diagnostics.length > 0 ? diagnostics : undefined);
+    });
+}
 function activate(context) {
     binaryPath = resolveBinaryPath(context.extensionPath);
     outputChannel = vscode.window.createOutputChannel("Ash");
+    diagnosticCollection = vscode.languages.createDiagnosticCollection("ash");
     if (binaryPath) {
         outputChannel.appendLine(`Using ash: ${binaryPath}`);
     }
@@ -182,12 +208,23 @@ function activate(context) {
         }
         const filePath = editor.document.uri.fsPath;
         const cwd = path.dirname(filePath);
+        validateDocument(editor.document);
         executeAsh(["--dry-run", filePath], cwd, "dry-run");
     });
     const stopScript = vscode.commands.registerCommand("ash.stopScript", () => {
         stopRunningProcess();
     });
-    context.subscriptions.push(runScript, checkScript, stopScript);
+    const saveListener = vscode.workspace.onDidSaveTextDocument((doc) => {
+        if (doc.languageId === "ash") {
+            validateDocument(doc);
+        }
+    });
+    const closeListener = vscode.workspace.onDidCloseTextDocument((doc) => {
+        if (doc.languageId === "ash") {
+            diagnosticCollection.delete(doc.uri);
+        }
+    });
+    context.subscriptions.push(runScript, checkScript, stopScript, diagnosticCollection, saveListener, closeListener);
 }
 function deactivate() {
     if (runningProcess) {

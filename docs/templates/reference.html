@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{TITLE}} — Ash</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .ref-hero {
+      padding: 64px 0 40px;
+      text-align: center;
+      background: linear-gradient(180deg, var(--bg2) 0%, var(--bg) 100%);
+      border-bottom: 1px solid var(--border);
+    }
+    .ref-hero h1 { font-size: 40px; font-weight: 800; margin-bottom: 8px; }
+    .ref-hero p { font-size: 16px; color: var(--text2); max-width: 600px; margin: 0 auto; }
+    .ref-content { padding: 40px 0 64px; }
+    .ref-content h2 { font-size: 26px; font-weight: 700; margin: 36px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+    .ref-content h3 { font-size: 18px; font-weight: 600; margin: 28px 0 10px; color: var(--accent2); }
+    .ref-content h4 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; color: var(--text2); text-transform: uppercase; letter-spacing: .05em; }
+    .ref-content p { font-size: 15px; line-height: 1.7; margin: 12px 0; color: var(--text2); }
+    .ref-content ul, .ref-content ol { margin: 8px 0 16px; padding-left: 24px; font-size: 15px; color: var(--text2); }
+    .ref-content li { margin: 4px 0; }
+    .ref-content li > p { margin: 4px 0; }
+    .ref-content strong { color: var(--text); }
+    .ref-content code { background: var(--bg3); padding: 2px 6px; border-radius: 4px; font-size: .85em; }
+    .ref-content pre { margin: 16px 0; }
+    .ref-content pre code { background: none; padding: 0; font-size: 13px; }
+    .ref-content a { color: var(--accent); }
+    .ref-content table { margin: 16px 0; }
+    .ref-content blockquote { border-left: 3px solid var(--accent); padding: 12px 20px; margin: 16px 0; background: var(--bg2); border-radius: 6px; color: var(--text2); }
+    .ref-content blockquote p { margin: 4px 0; }
+    .ref-content hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+    nav a.active { color: var(--text); }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <div class="logo"><a href="index.html" style="color:inherit;text-decoration:none"><span>ash</span></a></div>
+      <nav>
+        <a href="index.html">Home</a>
+        <a href="index.html#getting-started">Getting Started</a>
+        <a href="index.html#how-it-works">How it works</a>
+        <a href="index.html#playground">Playground</a>
+        <a href="agents.html">Agents</a>
+        <a href="reference.html" class="active">Reference</a>
+        <a href="https://github.com/kenny1125nz/ash-lang" target="_blank">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="ref-hero">
+    <div class="container">
+      {{HERO}}    </div>
+  </div>
+
+  <div class="ref-content">
+    <div class="container">
+      {{CONTENT}}
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container">
+      Ash — Open Source Task Runner for AI Agents &middot; <a href="https://github.com/kenny1125nz/ash-lang">GitHub</a>
+    </div>
+  </footer>
+</body>
+</html>

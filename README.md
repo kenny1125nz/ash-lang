@@ -164,17 +164,33 @@ Declare the agent with a shebang:
 do "Review src/" with opencode
 ```
 
+### Default agent
+
+Set the default agent for all subsequent `do` calls with `use`:
+
+```ash
+use opencode
+do "Review src/"                # uses opencode
+
+use claude-code
+do "Refactor the implementation" # uses claude-code
+```
+
+The agent can still be overridden per-call with `do "..." with <agent>`.
+
 ### Language overview
 
 ```ash
-do "Review src/" with opencode      # call an agent
+use opencode                             # set default agent
 
-fn rollback(FILE) {                  # functions
+do "Review src/"                         # call an agent
+
+fn rollback(FILE) {                      # functions
   exec git restore "${FILE}"
   do "Summarize what has been done"
 }
 
-for FILE in FILES {                  # loops, conditionals, retry
+for FILE in FILES {                      # loops, conditionals, retry
   try {
     do "Fix bugs in ${FILE}"
   } fail {
@@ -185,33 +201,53 @@ for FILE in FILES {                  # loops, conditionals, retry
 
 ## Directory Mode
 
-Pass a directory to run task files in numeric-prefix order:
+Pass a directory to walk its task tree in numeric-prefix order:
 
 ```bash
 ash ./tasks
 ash ./tasks --dry-run
+ash ./tasks --continue-on-error
 ```
+
+### Task tree layout
 
 ```
 tasks/
 ├── 01-intro.md
-├── 02-types/
-│   ├── 01-token.md
-│   ├── 02-value.md
-│   └── 03-ast.md
-└── 03-conclusion.md
+├── 02-setup/
+│   ├── 01-db.md
+│   ├── 02-config.ash
+│   └── 03-seed-data.md
+├── 03-build.ash
+└── 04-review.md
 ```
 
-Execution order: `01-intro.md` → `02-types/01-token.md` → `02-types/02-value.md` → `02-types/03-ast.md` → `03-conclusion.md`
+Files get a numeric prefix (`01-`, `02-`, etc.). Subdirectories group related tasks — the walker recurses into them in order.
 
-Files are executed when they have a numeric prefix (`01-`, `02-`, etc.). Files with duplicate prefixes at the same level are reported as errors.
+Execution order above: `01-intro.md` → `02-setup/01-db.md` → `02-setup/02-config.ash` → `02-setup/03-seed-data.md` → `03-build.ash` → `04-review.md`
 
-Markdown files can set per-task settings with YAML frontmatter:
+### File types
+
+| Type | Extension | How it's handled |
+|------|-----------|------------------|
+| Markdown | `.md` | Content is sent as a prompt to the configured agent. `${VAR}` interpolation is resolved from the evaluator scope. |
+| Ash script | `.ash` | Parsed and executed as an ash script. Has full access to variables, functions, control flow — including `do` statements. |
+
+### Numeric prefix
+
+Files and directories must start with a numeric prefix (`01-`, `02-step-`, etc.) to be included. Files without a prefix are silently skipped.
+
+Duplicate prefixes at the same level (e.g., `01-foo.md` and `01-bar.md` in the same directory) are reported as an error. Each prefix must be unique within its directory to maintain a deterministic ordering contract.
+
+### Frontmatter (`.md` files)
+
+Markdown tasks can set per-task configuration with YAML frontmatter:
 
 ```markdown
 ---
-agent: opencode
+agent: claude-code
 model: sonnet
+compact: truncate 32000
 on_fail: continue
 ---
 
@@ -219,6 +255,57 @@ on_fail: continue
 
 The prompt content for the agent goes here...
 ```
+
+| Key | Values | Default | Description |
+|-----|--------|---------|-------------|
+| `agent` | agent name | — | Override agent for this task |
+| `model` | model name | — | Override model for this task |
+| `compact` | directive | — | Context window strategy for this task |
+| `on_fail` | `stop`, `continue` | `stop` | Behavior when the task fails |
+
+### Shebang (`.ash` files)
+
+Ash scripts set their agent via shebang, same as standalone scripts:
+
+```ash
+#!opencode:1.0:sonnet
+
+do "Fix the migration script"
+if $? != 0 {
+  do "Rollback changes" with rollback-agent
+}
+```
+
+The shebang's engine and model become the defaults for `do` statements inside the script. Individual `do` calls can override with `with`/`using` clauses.
+
+### CLI flags
+
+| Flag | Description |
+|------|-------------|
+| `--dry-run` | Print the task list without executing |
+| `--continue-on-error` / `-k` | Keep running after a task fails |
+| `--check` / `-c` | Validate syntax without executing |
+| `--agent <name>:<model>` | Default agent and model for all tasks |
+
+### Skip behavior
+
+The following files and directories are silently skipped during the walk:
+
+- Hidden files and directories (starting with `.`)
+- Files without a numeric prefix
+- Non-task file extensions (not `.md` or `.ash`)
+- Empty markdown files (no content after frontmatter)
+- Empty ash scripts (no statements)
+
+### Directory orchestration inside scripts
+
+The tree walker can also be invoked from within an ash script using `do @"path/"`:
+
+```ash
+do @"tasks/" with opencode
+```
+
+When the `@` path points to a directory, the same tree walker runs — walking the directory, discovering tasks, and executing them in order. See [File-based Prompts](file-prompts.md).
 
 ## Ash Script Language
 
@@ -272,6 +359,12 @@ MSG = "hello ${NAME}"
 | `stderr` | `do`, `exec` | Stderr from the last call |
 | `error` | eval try body failure | Error message when a body statement fails |
 | `report` | eval try evaluator block | Captured `print` output from the `evaluate with` block |
+| `$_attempt` | `evaluate` body | Current attempt number, 1-indexed |
+| `$_max_attempts` | `evaluate` body | Total allowed attempts |
+| `$_feedback` | `evaluate` body | Findings from the previous evaluation iteration |
+| `$_evaluator_output` | `evaluate` evaluator | Full stdout from the evaluator |
+| `$score` | `evaluate` post-loop | The final score (accepted or last attempted) |
+| `$accepted` | `evaluate` post-loop | Whether the threshold was met |
 
 The `$` prefix is supported for backward compatibility (`$FILES`, `$DIFF`). Bare names without `$` are preferred.
 
@@ -321,28 +414,77 @@ try {
 } upto 3
 ```
 
-Eval try — evaluates a condition after each attempt:
+### Evaluate blocks
+
+`evaluate` is a top-level statement that runs a body, evaluates the result using an external evaluator (agent, function, or command), and retries until a numeric score threshold is met or attempts are exhausted.
 
 ```ash
-try {
-  do "Generate report"
-} evaluate with {
-  SCORE >= 85
-} accept {
-  print "quality threshold met"
-} partial {
-  print "attempt ${ATTEMPT} below threshold, retrying"
-} fail {
-  print "unexpected error"
-} upto 5
+evaluate {
+  do "Write a blog post about Rust"
+} by @"reviewer.md" with opencode
+   accept by 85
+   upto 5
 ```
 
-| Clause | Runs when |
-|--------|-----------|
-| `accept` | Evaluator returns truthy / `$?` == 0 |
-| `partial` | Evaluator returns falsy / `$?` == 1 |
-| `fail` | Body errors or evaluator `$?` >= 2 |
-| `upto N` | Maximum retry count |
+The `by` clause selects the evaluator — one of three forms:
+
+| Evaluator | Syntax | Description |
+|-----------|--------|-------------|
+| Agent | `@"prompt.md" [with <agent>] [using <model>]` | An agent reviews the output and produces a score |
+| Function | `fn_name(args...)` | A user-defined function returns the score |
+| Command | `exec "<command>"` | A shell command outputs the score |
+
+The agent evaluator receives language-injected scoring instructions so prompts don't need to specify the output format. The agent must output:
+
+```
+SCORE: <0-100 integer>
+FINDINGS:
+<actionable improvement feedback>
+```
+
+#### Per-iteration variables
+
+Within each iteration's body, these variables are automatically set:
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `$_attempt` | Int | Current attempt number, 1-indexed |
+| `$_max_attempts` | Int | Total allowed attempts |
+| `$_feedback` | String | Findings from the previous iteration (empty on attempt 1) |
+
+#### Post-loop variables
+
+After the evaluate block completes, these variables are set in the parent scope:
+
+| Variable | Type | On acceptance | On exhaustion |
+|----------|------|---------------|---------------|
+| `$score` | Int | The accepted score (>= threshold) | The last attempted score |
+| `$accepted` | Bool | `true` | `false` |
+| `$_evaluator_output` | String | Full evaluator stdout from the accepting run | Full evaluator stdout from the last run |
+
+#### Outcomes
+
+- **Acceptance** — score >= threshold on any attempt. The loop terminates immediately. Side effects from the accepting iteration are preserved.
+- **Exhaustion** — all attempts complete without reaching the threshold. The last iteration's side effects are preserved for inspection.
+- **Error** — body crash, evaluator failure, or score extraction failure propagates immediately. No silent retry.
+
+#### Example: branching on acceptance
+
+```ash
+evaluate {
+  do "Write documentation"
+} by score_fn()
+   accept by 80
+   upto 5
+
+if $accepted {
+  print "Approved with score $score"
+  exec deploy docs/
+} else {
+  print "Rejected (score $score), check output"
+  exit 1
+}
+```
 
 ## Functions
 
@@ -387,6 +529,8 @@ fn review_files(PATTERN, MODEL) {
 | Statement | Description |
 |-----------|-------------|
 | `exec cmd` | Run a shell command |
+| `evaluate { } by ... accept by ... upto N` | Retry body until a score threshold is met, evaluated by an agent/function/command |
+| `use <agent>` | Set the default agent for subsequent `do` calls |
 | `print msg` | Print output |
 | `include "file.ash"` | Load another ash script |
 | `env KEY` | Read an environment variable |
@@ -464,6 +608,28 @@ do @skills/review.md with opencode using sonnet
 do @'play_step${n}.md' with opencode
 do @${DIR}/prompts/task.md with opencode
 ```
+
+### Directory orchestration
+
+If the `@` path points to a **directory** rather than a file, the task tree walker runs instead — the same mechanism used by `ash tasks/`:
+
+```ash
+do @"tasks/" with opencode
+```
+
+This walks the directory, discovers numbered `.md` and `.ash` files, and executes them in sorted order using the specified agent. Each `.md` file becomes a standalone task sent to the agent. Each `.ash` file is executed as a script with access to the same evaluator scope.
+
+This lets scripts recursively compose task directories:
+
+```ash
+do @"review/" with opencode
+do @"fix/" with opencode using sonnet
+if $? == 0 {
+  do @"deploy/" with opencode
+}
+```
+
+Individual task files can override the agent and model via YAML frontmatter, just like in directory mode.
 
 ## REPL
 

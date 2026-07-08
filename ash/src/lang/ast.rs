@@ -234,6 +234,12 @@ pub struct SessionToggle {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct UseAgent {
+    pub pos: Pos,
+    pub agent: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct WithinToggle {
     pub pos: Pos,
     pub active: bool,
@@ -354,6 +360,7 @@ pub enum Node {
     CompactStmt(CompactStmt),
     SessionBlock(SessionBlock),
     SessionToggle(SessionToggle),
+    UseAgent(UseAgent),
     WithinToggle(WithinToggle),
     BinaryExpr(BinaryExpr),
     UnaryExpr(UnaryExpr),
@@ -399,6 +406,7 @@ impl Node {
             Node::CompactStmt(n) => &n.pos,
             Node::SessionBlock(n) => &n.pos,
             Node::SessionToggle(n) => &n.pos,
+            Node::UseAgent(n) => &n.pos,
             Node::WithinToggle(n) => &n.pos,
             Node::BinaryExpr(n) => &n.pos,
             Node::UnaryExpr(n) => &n.pos,

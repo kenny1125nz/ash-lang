@@ -99,9 +99,13 @@
           "patterns": [
             {
               "name": "support.variable.predefined.ash",
-              "match": "(stderr|stdout|report|error|\\?)"
+              "match": "(stderr|stdout|report|error|\\?|_attempt|_max_attempts|_feedback|_evaluator_output|score|accepted)"
             }
           ]
+        },
+        {
+          "name": "support.variable.predefined.ash",
+          "match": "\\$\\?"
         },
         {
           "name": "variable.other.normal.ash",
@@ -138,7 +142,7 @@
       "patterns": [
         {
           "name": "keyword.control.ash",
-          "match": "\\b(if|else|for|in|while|fn|return|break|continue|do|try|wait|within|session|begin|end)\\b"
+          "match": "\\b(if|else|for|in|while|fn|return|break|continue|do|try|wait|within|session|begin|end|evaluate|use)\\b"
         },
         {
           "name": "keyword.operator.ash",
@@ -146,7 +150,7 @@
         },
         {
           "name": "keyword.other.clause.ash",
-          "match": "\\b(with|subagent|using|compact|evaluate|accept|partial|fail|upto)\\b"
+          "match": "\\b(with|subagent|using|compact|accept|partial|fail|upto|by)\\b"
         },
         {
           "name": "constant.language.ash",

@@ -4,6 +4,7 @@ use log::{debug, info};
 use regex::Regex;
 
 use crate::lang::ast::*;
+use crate::runtime::tree::{self, WalkConfig};
 use crate::runtime::value::Value;
 use crate::telemetry;
 
@@ -11,6 +12,21 @@ use super::{EvalError, Evaluator, ExitError};
 
 impl Evaluator {
     pub(super) fn eval_agent_call(&mut self, n: &AgentCall) -> Result<Value, EvalError> {
+        // If the prompt is a @-prefixed path that points to a directory,
+        // run the task tree walker instead of calling an agent.
+        if let Node::FilePath(fp) = &*n.prompt {
+            let path_val = self.eval_expr(&fp.path)?;
+            let path_str = match &path_val {
+                Value::String(s) => s.clone(),
+                other => format!("{}", other),
+            };
+            if let Ok(md) = std::fs::metadata(&path_str) {
+                if md.is_dir() {
+                    return self.eval_tree_dir(&path_str, n);
+                }
+            }
+        }
+
         let prompt_val = self.eval_expr(&n.prompt)?;
         let prompt_str = match &prompt_val {
             Value::String(s) => s.clone(),
@@ -162,6 +178,51 @@ impl Evaluator {
         }
 
         Ok(Value::String(result.stdout))
+    }
+
+    fn eval_tree_dir(&mut self, path: &str, n: &AgentCall) -> Result<Value, EvalError> {
+        let agent_name = n
+            .agent
+            .as_deref()
+            .unwrap_or(&self.default_agent)
+            .to_string();
+
+        let model_str = if let Some(ref m) = n.model {
+            let val = self.eval_expr(m)?;
+            match &val {
+                Value::String(s) => s.clone(),
+                other => format!("{}", other),
+            }
+        } else {
+            self.default_model.clone()
+        };
+
+        let config = WalkConfig {
+            root: std::path::PathBuf::from(path),
+            dry_run: false,
+            continue_on_error: false,
+            default_agent: agent_name,
+            default_model: model_str,
+        };
+
+        let exit_code = tree::run_tree(config, self);
+
+        {
+            let mut scope = self.current_scope.lock().unwrap();
+            scope.set_local("?", Value::Int(exit_code as i64));
+            let summary = if exit_code == 0 {
+                "all tasks passed"
+            } else {
+                "some tasks failed"
+            };
+            scope.set_local("stdout", Value::String(summary.to_string()));
+        }
+
+        if exit_code != 0 {
+            Err(EvalError::Exit(ExitError { code: exit_code }))
+        } else {
+            Ok(Value::String("all tasks passed".to_string()))
+        }
     }
 
     fn eval_max_retries(&mut self, expr: &Node) -> Result<usize, EvalError> {

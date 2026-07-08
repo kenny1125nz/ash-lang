@@ -222,6 +222,7 @@ impl Evaluator {
             Node::SessionBlock(n) => self.eval_session_block(n),
             Node::SessionToggle(n) => self.eval_session_toggle(n),
             Node::WithinToggle(n) => self.eval_within_toggle(n),
+            Node::UseAgent(n) => self.eval_use_agent(n),
             _ => self.eval_expr(node),
         }
     }
@@ -573,6 +574,12 @@ impl Evaluator {
         }
         Ok(Value::Nil)
     }
+
+    fn eval_use_agent(&mut self, n: &UseAgent) -> Result<Value, EvalError> {
+        self.set_default_agent(&n.agent);
+        self.set_exit_code(0);
+        Ok(Value::Nil)
+    }
 }
 
 #[cfg(test)]
@@ -583,9 +590,9 @@ mod tests {
 
     use crate::lang::ast::{
         ArrayLiteral, Background, BinaryExpr, BinaryTry, BoolLiteral, Break, CompactStmt, Continue,
-        DirBlock, ElseIf, Env, Evaluate, EvaluateEvaluator, EvalTry, Exec, Exit, FnCall, FnDecl,
-        ForStmt, IfStmt, Include, IntLiteral, Pos, Print, Return, StringLiteral, UnaryExpr,
-        VarAssign, VarRef, WaitBlock, WhileStmt, AgentCall,
+        DirBlock, ElseIf, Env, Evaluate, EvaluateEvaluator, EvalTry, Exec, Exit, FilePath, FnCall,
+        FnDecl, ForStmt, IfStmt, Include, IntLiteral, Pos, Print, Return, StringLiteral, UnaryExpr,
+        UseAgent, VarAssign, VarRef, WaitBlock, WhileStmt, AgentCall,
     };
 
     use crate::engine::{self, EchoDriver, LocalCliAdapter};
@@ -1851,5 +1858,99 @@ mod tests {
         assert_eq!(ev.get_var("accepted").unwrap(), Value::Bool(false));
         let score = ev.get_var("score").unwrap();
         assert_eq!(score, Value::Int(75));
+    }
+
+    // ===== Directory tree invocation tests =====
+
+    #[test]
+    fn test_agent_call_with_dir_runs_tree() {
+        register_echo();
+
+        // Create a temp task directory
+        let dir = std::env::temp_dir().join(format!(
+            "ash-dir-test-{}",
+            std::sync::atomic::AtomicUsize::new(0).fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("01-task.md"),
+            "---\nagent: echo\n---\n\nHello from directory task",
+        )
+        .unwrap();
+
+        let mut ev = make_evaluator();
+        ev.stdout = Arc::new(Mutex::new(Box::new(std::io::sink())));
+
+        // Build: do @"<dir>/"  (FilePath pointing to a directory)
+        let fp_path = Node::StringLiteral(StringLiteral {
+            pos: Pos { line: 1, col: 1 },
+            value: dir.to_str().unwrap().to_string(),
+            interps: vec![],
+        });
+        let prompt = Node::FilePath(FilePath {
+            pos: Pos { line: 1, col: 1 },
+            path: Box::new(fp_path),
+        });
+        let mut call = agent_call_node(prompt);
+        if let Node::AgentCall(ref mut ac) = call {
+            ac.agent = Some("echo".to_string());
+        }
+
+        let result = ev.eval_statement(&call).unwrap();
+        assert_eq!(result, Value::String("all tasks passed".to_string()));
+        assert_eq!(ev.get_var("?").unwrap(), Value::Int(0));
+
+        // Cleanup
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_agent_call_with_file_path_reads_file() {
+        register_echo();
+
+        // Create a temp file (not a directory)
+        let dir = std::env::temp_dir().join("ash-file-test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let file_path = dir.join("prompt.txt");
+        std::fs::write(&file_path, "custom prompt content").unwrap();
+
+        let mut ev = make_evaluator();
+        ev.stdout = Arc::new(Mutex::new(Box::new(std::io::sink())));
+
+        // Build: @"<file>"  — should read the file, not run the tree
+        let fp_path = Node::StringLiteral(StringLiteral {
+            pos: Pos { line: 1, col: 1 },
+            value: file_path.to_str().unwrap().to_string(),
+            interps: vec![],
+        });
+        let prompt = Node::FilePath(FilePath {
+            pos: Pos { line: 1, col: 1 },
+            path: Box::new(fp_path),
+        });
+        let mut call = agent_call_node(prompt);
+        if let Node::AgentCall(ref mut ac) = call {
+            ac.agent = Some("echo".to_string());
+        }
+
+        let result = ev.eval_statement(&call).unwrap();
+        // echo agent echoes the prompt, which should be the file content
+        assert_eq!(result, Value::String("custom prompt content\n".to_string()));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_use_agent_sets_default() {
+        let mut ev = make_evaluator();
+        ev.default_agent = "echo".to_string();
+
+        let stmt = Node::UseAgent(UseAgent {
+            pos: Pos { line: 1, col: 1 },
+            agent: "opencode".to_string(),
+        });
+        let result = ev.eval_statement(&stmt).unwrap();
+        assert_eq!(result, Value::Nil);
+        assert_eq!(ev.default_agent, "opencode");
+        assert_eq!(ev.get_var("?").unwrap(), Value::Int(0));
     }
 }

@@ -15,6 +15,10 @@ pub fn is_tty() -> bool {
     io::stdin().is_terminal()
 }
 
+fn prompt_str(eval: &Evaluator) -> String {
+    format!("ash@{}> ", eval.default_agent)
+}
+
 pub fn run_repl(eval: &mut Evaluator) -> i32 {
     println!("ash REPL. Type .help for commands, Ctrl-D to exit.");
     println!();
@@ -30,7 +34,8 @@ fn run_repl_piped(eval: &mut Evaluator) -> i32 {
     let mut stdin = io::stdin().lock();
 
     loop {
-        let accumulated = match read_input(&mut |p| read_line(&mut stdin, p), "ash> ") {
+        let prompt = prompt_str(eval);
+        let accumulated = match read_input(&mut |p| read_line(&mut stdin, p), &prompt) {
             Some(input) => input,
             None => {
                 println!();
@@ -64,7 +69,8 @@ fn run_repl_tty(eval: &mut Evaluator) -> i32 {
     let mut rl = DefaultEditor::new().expect("failed to create line editor");
 
     loop {
-        let accumulated = match read_input(&mut |p| read_line_tty(&mut rl, p), "ash> ") {
+        let prompt = prompt_str(eval);
+        let accumulated = match read_input(&mut |p| read_line_tty(&mut rl, p), &prompt) {
             Some(input) => input,
             None => {
                 println!();
@@ -268,20 +274,33 @@ fn handle_dot_command(cmd: &str, eval: &mut Evaluator) -> Option<i32> {
             println!();
             println!("Commands:");
             println!("  .help        Show this help");
+            println!("  .agent       Show current default agent");
+            println!("  .agent <name> Set default agent for do statements");
             println!("  .clear       Clear all variables and reset scope");
             println!("  .vars        List all variables and their values");
+            println!();
+            println!("The prompt shows the current agent: ash@<agentname>>");
+            println!("Set it with 'use <agentname>' or '.agent <name>'.");
             println!();
             println!("Block constructs (if, for, while, fn, try, session, within,");
             println!("wait) support multi-line entry. Just start typing and press Enter —");
             println!("the REPL will show '... ' until the block is complete.");
             println!();
             println!("Use trailing \\ for manual line continuation:");
-            println!("  ash> do \"long prompt \\");
+            println!("  ash@opencode> do \"long prompt \\");
             println!("  ... with examples\" with opencode");
             println!();
             println!("Press Ctrl-C to cancel multi-line input.");
             println!("Press Ctrl-D or type '.exit' to exit.");
             println!();
+        }
+        ".agent" => {
+            let arg = parts.get(1).unwrap_or(&"").trim();
+            if arg.is_empty() {
+                println!("current agent: {}", eval.default_agent);
+            } else {
+                eval.set_default_agent(arg);
+            }
         }
         ".clear" => {
             eval.current_scope = Scope::new();

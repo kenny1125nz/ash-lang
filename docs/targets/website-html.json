@@ -1,0 +1,26 @@
+{
+  "output": "web-site/reference.html",
+  "title": "# Ash — Feature Reference\n\nComplete feature reference for Ash agent shell scripts.\n",
+  "units": [
+    "what-is-ash",
+    "install",
+    "quick-start",
+    "writing-tasks",
+    "scripting",
+    "directory-mode",
+    "ash-scripts",
+    "variables",
+    "control-flow",
+    "functions",
+    "builtins",
+    "sessions",
+    "parallel",
+    "file-prompts",
+    "repl",
+    "supported-agents",
+    "building-from-source",
+    "license",
+    "vscode-extension"
+  ],
+  "template": "docs/templates/reference.html"
+}

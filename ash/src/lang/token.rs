@@ -105,7 +105,7 @@ pub fn keywords() -> HashMap<&'static str, TokenKind> {
         "return", "break", "continue", "print", "exec", "exit", "env",
         "include", "within", "wait", "try", "upto", "fail", "evaluate",
         "with", "accept", "partial", "compact", "using", "do", "and", "or", "not",
-        "session", "begin", "end",
+        "session", "begin", "end", "use",
     ] {
         m.insert(*kw, TokenKind::TkIdent);
     }
