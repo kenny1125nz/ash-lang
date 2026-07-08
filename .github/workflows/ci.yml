@@ -23,6 +23,7 @@ jobs:
       - name: Verify docs are in sync
         working-directory: ./
         run: |
+          npm install --prefix docs
           node docs/assemble.js
           git diff --exit-code README.md npm-package/README.md ash-vscode/README.md docs/website-reference.md
 
