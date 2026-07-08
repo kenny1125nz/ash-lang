@@ -430,8 +430,30 @@ impl Parser {
             && self.current().literal == "using"
         {
             self.advance();
-            let model = self.parse_primary()?;
-            agent.model = Some(Box::new(model));
+            if self.current().kind == TokenKind::TkIdent {
+                let mut model_name = self.current().literal.clone();
+                self.advance();
+                while (self.current().kind == TokenKind::TkMinus || self.current().kind == TokenKind::TkSlash)
+                    && self.peek().kind == TokenKind::TkIdent
+                {
+                    if self.current().kind == TokenKind::TkMinus {
+                        model_name.push('-');
+                    } else {
+                        model_name.push('/');
+                    }
+                    self.advance();
+                    let part = self.expect(TokenKind::TkIdent)?;
+                    model_name.push_str(&part.literal);
+                }
+                agent.model = Some(Box::new(Node::StringLiteral(StringLiteral {
+                    pos: Pos { line: self.current().line, col: self.current().col },
+                    value: model_name,
+                    interps: vec![],
+                })));
+            } else {
+                let model = self.parse_primary()?;
+                agent.model = Some(Box::new(model));
+            }
         }
 
         if self.current().kind == TokenKind::TkIdent

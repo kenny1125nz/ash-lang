@@ -32,6 +32,7 @@ impl Evaluator {
                             session_depth: 0,
                             within_stack: Vec::new(),
                             telemetry_ctx: None,
+                            script_args: Vec::new(),
                         };
                         eval.push_scope();
                         let _ = eval.eval_statement(&stmt_clone);
@@ -72,6 +73,7 @@ impl Evaluator {
                 session_depth: 0,
                 within_stack: Vec::new(),
                 telemetry_ctx: None,
+                script_args: Vec::new(),
             };
             eval.push_scope();
             let _ = eval.eval_statement(&stmt);

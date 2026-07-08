@@ -349,8 +349,8 @@ fn run() -> i32 {
         }
     }
 
-    let src = match get_input(&positional, config_override.as_deref(), &default_agent, &default_model) {
-        Some(s) => s,
+    let (src, script_args) = match get_input(&positional, config_override.as_deref(), &default_agent, &default_model) {
+        Some(pair) => pair,
         None => {
             ash::telemetry::shutdown();
             return 1;
@@ -381,6 +381,7 @@ fn run() -> i32 {
     ensure_agents_registered(config_override.as_deref());
 
     let mut eval = Evaluator::new();
+    eval.set_args(script_args);
     if let Some(ref shebang) = script.shebang {
         eval.set_default_agent(&shebang.engine);
         if !shebang.model.is_empty() {
@@ -401,15 +402,17 @@ fn run() -> i32 {
     exit_code
 }
 
-fn get_input(positional: &[String], config_override: Option<&str>, default_agent: &str, default_model: &str) -> Option<String> {
+fn get_input(positional: &[String], config_override: Option<&str>, default_agent: &str, default_model: &str) -> Option<(String, Vec<String>)> {
     if !positional.is_empty() {
-        match std::fs::read_to_string(&positional[0]) {
-            Ok(s) => return Some(s),
+        let src = match std::fs::read_to_string(&positional[0]) {
+            Ok(s) => s,
             Err(e) => {
                 eprintln!("error reading {}: {}", positional[0], e);
                 return None;
             }
-        }
+        };
+        let args = positional[1..].to_vec();
+        return Some((src, args));
     }
 
     #[cfg(feature = "repl")]
@@ -427,7 +430,7 @@ fn get_input(positional: &[String], config_override: Option<&str>, default_agent
 
     let mut input = String::new();
     match std::io::stdin().read_to_string(&mut input) {
-        Ok(_) => Some(input),
+        Ok(_) => Some((input, Vec::new())),
         Err(e) => {
             eprintln!("error reading stdin: {}", e);
             None

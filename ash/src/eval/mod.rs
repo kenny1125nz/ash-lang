@@ -87,6 +87,7 @@ pub struct Evaluator {
     pub session_depth: usize,
     pub within_stack: Vec<PathBuf>,
     pub telemetry_ctx: Option<telemetry::context::SpanContext>,
+    script_args: Vec<String>,
 }
 
 impl Evaluator {
@@ -106,6 +107,7 @@ impl Evaluator {
             session_depth: 0,
             within_stack: Vec::new(),
             telemetry_ctx: None,
+            script_args: Vec::new(),
         }
     }
 
@@ -115,6 +117,10 @@ impl Evaluator {
 
     pub fn set_default_model(&mut self, name: &str) {
         self.default_model = name.to_string();
+    }
+
+    pub fn set_args(&mut self, args: Vec<String>) {
+        self.script_args = args;
     }
 
     // --- Public API ---
@@ -132,6 +138,14 @@ impl Evaluator {
                 telemetry::event::EventKind::SessionStart,
                 serde_json::json!({"script_len": script.body.len()}),
             );
+        }
+
+        {
+            let mut scope = self.global_scope.lock().unwrap();
+            for (i, arg) in self.script_args.iter().enumerate() {
+                scope.set_local(&(i + 1).to_string(), Value::String(arg.clone()));
+            }
+            scope.set_local("#", Value::Int(self.script_args.len() as i64));
         }
 
         let start = std::time::Instant::now();
