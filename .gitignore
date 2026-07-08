@@ -6,3 +6,4 @@ ash-wasm/pkg/
 .aider*
 *.vsix
 .VSCodeCounter/
+tmp/
