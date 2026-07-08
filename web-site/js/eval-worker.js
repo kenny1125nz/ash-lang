@@ -95,7 +95,7 @@ self.onmessage = function (e) {
 
 async function init() {
   try {
-    const mod = await import('../wasm/ash.js');
+    const mod = await import('../wasm/ash_wasm.js');
     await mod.default();
     ashWasm = { run: mod.run, parse: mod.parse, repl_init: mod.repl_init, repl_eval: mod.repl_eval };
     mod.register_agent_callback(agentCallback);

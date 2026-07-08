@@ -1,2 +1,6 @@
+ash_wasm.js
 ash_wasm_bg.wasm
 ash_wasm_bg.js
+ash_wasm_bg.wasm.d.ts
+*.d.ts
+package.json
