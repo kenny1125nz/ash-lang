@@ -1,0 +1,25 @@
+{
+  "output": "README.md",
+  "title": "# Ash\n\n**Deterministic agent orchestration — structured task files, scriptable when you need more.**\n\n",
+  "units": [
+    "what-is-ash",
+    "install",
+    "quick-start",
+    "writing-tasks",
+    "scripting",
+    "directory-mode",
+    "ash-scripts",
+    "variables",
+    "control-flow",
+    "functions",
+    "builtins",
+    "sessions",
+    "parallel",
+    "file-prompts",
+    "repl",
+    "supported-agents",
+    "building-from-source",
+    "license"
+  ],
+  "footer": ""
+}

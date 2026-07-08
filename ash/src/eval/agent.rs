@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use log::{debug, info};
+use regex::Regex;
 
 use crate::lang::ast::*;
 use crate::runtime::value::Value;
@@ -368,5 +369,253 @@ impl Evaluator {
         // Partial/fail already ran on each retry.
         self.pop_scope();
         Ok(Value::Int(0))
+    }
+
+    pub(super) fn eval_evaluate(&mut self, n: &Evaluate) -> Result<Value, EvalError> {
+        let max = self.eval_max_retries(&n.upto)?;
+        let threshold_val = self.eval_expr(&n.accept_by)?;
+        let threshold = match threshold_val {
+            Value::Int(i) => i,
+            Value::Float(f) => f as i64,
+            _ => {
+                return Err(EvalError::Msg(format!(
+                    "accept by threshold must be an integer, got {}",
+                    threshold_val.type_name()
+                )))
+            }
+        };
+
+        let mut last_score: i64 = 0;
+        let mut feedback = String::new();
+        let mut last_evaluator_output = String::new();
+        let mut accepted = false;
+
+        'outer: for attempt in 1..=max {
+            self.push_scope();
+            self.set_var("_attempt", Value::Int(attempt as i64))
+                .map_err(EvalError::Msg)?;
+            self.set_var("_max_attempts", Value::Int(max as i64))
+                .map_err(EvalError::Msg)?;
+            self.set_var("_feedback", Value::String(feedback.clone()))
+                .map_err(EvalError::Msg)?;
+
+            // Evaluate body
+            let body_result = match &*n.body {
+                Node::Block(block) => {
+                    let mut last = Value::Nil;
+                    for stmt in &block.statements {
+                        last = self.eval_statement(stmt)?;
+                        if self.signal.is_some() {
+                            break;
+                        }
+                    }
+                    Ok(last)
+                }
+                other => self.eval_expr(other),
+            };
+
+            if let Err(e) = body_result {
+                self.pop_scope();
+                return Err(e);
+            }
+
+            // Dispatch to evaluator
+            let (evaluator_output, score_val) = self.eval_evaluator(&n.evaluator, attempt)?;
+
+            let score = match score_val {
+                Value::Int(i) => i,
+                _ => {
+                    self.pop_scope();
+                    return Err(EvalError::Msg(
+                        "evaluator did not produce a valid integer score".to_string(),
+                    ));
+                }
+            };
+
+            if score < 0 || score > 100 {
+                self.pop_scope();
+                return Err(EvalError::Msg(format!(
+                    "score out of range: {} (must be 0-100)",
+                    score
+                )));
+            }
+
+            last_evaluator_output = evaluator_output.clone();
+            self.set_var("_evaluator_output", Value::String(evaluator_output.clone()))
+                .map_err(EvalError::Msg)?;
+
+            feedback = Self::extract_findings(&evaluator_output);
+
+            if score >= threshold {
+                accepted = true;
+                last_score = score;
+                self.pop_scope();
+                break 'outer;
+            }
+
+            last_score = score;
+            self.pop_scope();
+        }
+
+        self.set_var("score", Value::Int(last_score))
+            .map_err(EvalError::Msg)?;
+        self.set_var("accepted", Value::Bool(accepted))
+            .map_err(EvalError::Msg)?;
+        self.set_var("_evaluator_output", Value::String(last_evaluator_output))
+            .map_err(EvalError::Msg)?;
+
+        Ok(Value::Int(last_score))
+    }
+
+    fn eval_evaluator(
+        &mut self,
+        evaluator: &EvaluateEvaluator,
+        attempt: usize,
+    ) -> Result<(String, Value), EvalError> {
+        match evaluator {
+            EvaluateEvaluator::Agent(agent_call) => {
+                let augmented = self.augment_evaluator_prompt(agent_call, attempt)?;
+                let mut modified = agent_call.clone();
+                modified.prompt = Box::new(Node::StringLiteral(StringLiteral {
+                    pos: agent_call.prompt.pos().clone(),
+                    value: augmented,
+                    interps: vec![],
+                }));
+                let result = self.eval_agent_call(&modified)?;
+                let output = format!("{}", result);
+                let score = Self::parse_agent_score(&output)?;
+                Ok((output, Value::Int(score)))
+            }
+            EvaluateEvaluator::FnCall(fn_call) => {
+                let result = self.eval_fn_call(fn_call)?;
+                let score_val = match result {
+                    Value::Int(i) => i,
+                    Value::Float(f) => f as i64,
+                    ref other => {
+                        return Err(EvalError::Msg(format!(
+                            "function evaluator must return int or float, got {}",
+                            other.type_name()
+                        )))
+                    }
+                };
+                let output = format!("{}", result);
+                Ok((output, Value::Int(score_val)))
+            }
+            EvaluateEvaluator::Exec(exec) => {
+                let result = self.eval_exec(exec)?;
+                let output = format!("{}", result);
+                let score = Self::parse_command_score(&output)?;
+                Ok((output, Value::Int(score)))
+            }
+        }
+    }
+
+    fn augment_evaluator_prompt(
+        &mut self,
+        agent_call: &AgentCall,
+        attempt: usize,
+    ) -> Result<String, EvalError> {
+        let prompt_val = self.eval_expr(&agent_call.prompt)?;
+        let prompt_str = format!("{}", prompt_val);
+
+        let scoring_template = r#"You are evaluating the quality of the following work.
+Please provide a numerical score on a scale of 0 to 100.
+
+Output your evaluation in exactly this format:
+
+SCORE: <0-100 integer>
+FINDINGS:
+<actionable improvement feedback>
+
+---
+
+"#;
+
+        let mut augmented = String::new();
+        augmented.push_str(scoring_template);
+        augmented.push_str(&prompt_str);
+
+        // Add git diff context (read-only, for agent evaluators)
+        if attempt > 1 {
+            let diff = self.get_git_diff();
+            if let Some(diff_str) = diff {
+                augmented.push_str("\n\n--- Changes made ---\n");
+                augmented.push_str(&diff_str);
+            }
+        }
+
+        Ok(augmented)
+    }
+
+    fn get_git_diff(&self) -> Option<String> {
+        let result = std::process::Command::new("git")
+            .args(["diff", "--", ".", "':!.ash/'"])
+            .output()
+            .ok()?;
+        if result.status.success() {
+            let out = String::from_utf8_lossy(&result.stdout).to_string();
+            if out.is_empty() {
+                None
+            } else {
+                Some(out)
+            }
+        } else {
+            None
+        }
+    }
+
+    fn parse_agent_score(output: &str) -> Result<i64, EvalError> {
+        let re =
+            Regex::new(r"(?im)^SCORE:\s*(\d+)\s*$").unwrap();
+        if let Some(caps) = re.captures(output) {
+            let score: i64 = caps[1].parse().map_err(|_| {
+                EvalError::Msg("failed to parse SCORE value as integer".to_string())
+            })?;
+            Ok(score)
+        } else {
+            Err(EvalError::Msg(
+                "agent evaluator output missing SCORE: <N> line".to_string(),
+            ))
+        }
+    }
+
+    fn parse_command_score(output: &str) -> Result<i64, EvalError> {
+        // First attempt: structured SCORE: format
+        let re =
+            Regex::new(r"(?im)^SCORE:\s*(\d+)\s*$").unwrap();
+        if let Some(caps) = re.captures(output) {
+            let score: i64 = caps[1].parse().map_err(|_| {
+                EvalError::Msg("failed to parse SCORE value as integer".to_string())
+            })?;
+            return Ok(score);
+        }
+
+        // Fallback: first standalone integer line
+        let line_re = Regex::new(r"^\s*(\d+)\s*$").unwrap();
+        for line in output.lines() {
+            if let Some(caps) = line_re.captures(line) {
+                let score: i64 = caps[1].parse().unwrap_or(0);
+                return Ok(score);
+            }
+        }
+
+        Err(EvalError::Msg(
+            "command evaluator output contains no parseable score".to_string(),
+        ))
+    }
+
+    fn extract_findings(output: &str) -> String {
+        let re = Regex::new(r"(?im)^[ \t]*FINDINGS:[ \t]*$").unwrap();
+        if let Some(m) = re.find(output) {
+            let after = &output[m.end()..];
+            let trimmed = after.trim();
+            if trimmed.is_empty() {
+                output.to_string()
+            } else {
+                trimmed.to_string()
+            }
+        } else {
+            output.to_string()
+        }
     }
 }

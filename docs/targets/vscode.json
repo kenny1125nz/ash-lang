@@ -1,0 +1,8 @@
+{
+  "output": "ash-vscode/README.md",
+  "title": "# Ash Agent Shell — VS Code Extension\n\nSyntax highlighting, check, and run commands for Ash (`.ash`) agent shell scripts.\n\n",
+  "units": [
+    "vscode-extension"
+  ],
+  "footer": ""
+}

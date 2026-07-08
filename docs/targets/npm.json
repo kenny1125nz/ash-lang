@@ -1,0 +1,12 @@
+{
+  "output": "npm-package/README.md",
+  "title": "# @ash-lang/cli\n\nAsh is a task runner for AI agents — a scripting language that composes AI agents into automated workflows. Drop markdown files in a folder, number them, and run. When you need loops, retries, or conditional logic — add an `.ash` script. Start simple. Grow as needed.\n\n",
+  "units": [
+    "install",
+    "quick-start",
+    "scripting",
+    "supported-agents",
+    "repl"
+  ],
+  "footer": ""
+}

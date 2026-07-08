@@ -279,7 +279,7 @@ impl Evaluator {
         self.resolve_interpolations(&content, &[]).map(Value::String)
     }
 
-    fn eval_fn_call(&mut self, n: &FnCall) -> Result<Value, EvalError> {
+    pub(super) fn eval_fn_call(&mut self, n: &FnCall) -> Result<Value, EvalError> {
         match n.name.as_str() {
             "len" => {
                 if n.args.len() != 1 {

@@ -181,6 +181,22 @@ pub struct EvalTry {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum EvaluateEvaluator {
+    Agent(AgentCall),
+    FnCall(FnCall),
+    Exec(Exec),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Evaluate {
+    pub pos: Pos,
+    pub body: Box<Node>,
+    pub evaluator: EvaluateEvaluator,
+    pub accept_by: Box<Node>,
+    pub upto: Box<Node>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct WaitBlock {
     pub pos: Pos,
     pub body: Option<Box<Node>>,
@@ -331,6 +347,7 @@ pub enum Node {
     AgentCall(AgentCall),
     BinaryTry(BinaryTry),
     EvalTry(EvalTry),
+    Evaluate(Evaluate),
     WaitBlock(WaitBlock),
     Background(Background),
     DirBlock(DirBlock),
@@ -375,6 +392,7 @@ impl Node {
             Node::AgentCall(n) => &n.pos,
             Node::BinaryTry(n) => &n.pos,
             Node::EvalTry(n) => &n.pos,
+            Node::Evaluate(n) => &n.pos,
             Node::WaitBlock(n) => &n.pos,
             Node::Background(n) => &n.pos,
             Node::DirBlock(n) => &n.pos,

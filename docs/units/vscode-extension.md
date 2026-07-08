@@ -1,6 +1,6 @@
-# Ash Agent Shell — VS Code Extension
-
-Syntax highlighting, check, and run commands for Ash (`.ash`) agent shell scripts.
+---
+{"id": "vscode-extension", "title": "VS Code Extension"}
+---
 
 ## VS Code Extension
 

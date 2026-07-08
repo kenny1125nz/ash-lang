@@ -2,53 +2,96 @@
 
 Ash is a task runner for AI agents — a scripting language that composes AI agents into automated workflows. Drop markdown files in a folder, number them, and run. When you need loops, retries, or conditional logic — add an `.ash` script. Start simple. Grow as needed.
 
-## Install
+## Installation
 
-```sh
-npm i -g @ash-lang/cli
+### npm
+
+```bash
+npm install -g @ash-lang/cli
 ```
 
 On `npm install`, the correct platform binary is downloaded from GitHub Releases automatically.
 
-## Usage
+### Prebuilt binaries
 
-Replace `opencode` with the agent you have installed — opencode, claude-code, codex, gemini-cli, or kimi (echo is the built-in default when none is found, and these are the agents with built-in support):
+Download from [GitHub Releases](https://github.com/kenny1125nz/ash-lang/releases).
 
-```sh
-ash --agent opencode ./tasks
+Place the binary alongside `ash.js` in the npm package directory if the automatic download fails.
+
+### Requirements
+
+- Rust 1.70+ (for building from source)
+- Node.js (for npm install)
+
+## Quick Start
+
+### Configure your agent
+
+Create `ash.yml` in your project root:
+
+```yaml
+default_agent: opencode
 ```
 
-Point Ash at a directory of numbered markdown tasks:
+Or set it per-run:
 
-```
-tasks/
-├── 01-research.md
-├── 02-implement/
-│   ├── 00-init.ash
-│   ├── 01-auth.md
-│   ├── 02-api.md
-│   └── 03-tests.md
-├── 03-review.md
-└── 04-deploy.md
+```bash
+ash --agent opencode tasks/
 ```
 
-```sh
-ash ./tasks
+### Run your first project
+
+```
+my-project/
+├── ash.yml
+└── tasks/
+    ├── 1-init/
+    │   └── 01-setup.md
+    └── 2-feature/
+        └── 01-add-login.md
 ```
 
-Each `.md` file is one task sent to an AI agent. Files run in sorted order. When you need more than a single prompt — loops, retries, conditionals — use an `.ash` script:
-
-```sh
-ash path/to/workflow.ash
+```bash
+ash my-project/tasks/
 ```
 
-Or via `npx`:
+Ash prints each task and its result as the agent completes it. Tasks that return a non-zero exit code are marked as failures.
 
-```sh
-npx @ash-lang/cli ./tasks
+### Skip failures, keep going
+
+```bash
+ash --continue-on-error tasks/
 ```
 
-For `.ash` scripts, declare the agent with a shebang:
+### Validate without running
+
+```bash
+ash --check tasks/
+```
+
+### See what would run
+
+```bash
+ash --dry-run tasks/
+```
+
+## Scripting with .ash Files
+
+When you need more than one-shot prompts — chaining, conditionals, parallelism — write an `.ash` script:
+
+```ash
+#!opencode
+do "Write a hello world program in Rust"
+print stdout
+```
+
+```bash
+ash hello.ash
+```
+
+### Agent shebang
+
+Declare the agent with a shebang:
 
 ```ash
 #!opencode:1.0
@@ -56,40 +99,64 @@ For `.ash` scripts, declare the agent with a shebang:
 do "Review src/" with opencode
 ```
 
-For `.md` tasks, set the agent in YAML frontmatter:
-
-```markdown
----
-agent: opencode
----
-
-# Task Title
-
-The prompt content goes here...
-```
-
-## Language
+### Language overview
 
 ```ash
 do "Review src/" with opencode      # call an agent
 
-fn rollback(FILE) {                  # functions, composition
+fn rollback(FILE) {                  # functions
   exec git restore "${FILE}"
-  do "Summarize what has been done for ${FILE} and save it to summary.md"
-  exec git checkout -b "failure/${FILE}"
-  exec git add summary.md
-  exec git commit -m "fix failed for ${FILE}"
+  do "Summarize what has been done"
 }
 
-for FILE in FILES {                  # loop, conditionals, retry
+for FILE in FILES {                  # loops, conditionals, retry
   try {
     do "Fix bugs in ${FILE}"
   } fail {
-    rollback(FILE)
+    print "failed on ${FILE}"
   } upto 3
 }
 ```
 
-## Manual binary download
+## Supported Agents
 
-If the automatic download fails, grab the binary from [GitHub Releases](https://github.com/kenny1125nz/ash-lang/releases/latest) and place it alongside `ash.js` in the package directory.
+| Agent | Description |
+|-------|-------------|
+| `echo` | Built-in passthrough for testing |
+| `opencode` | OpenCode CLI agent |
+| `claude-code` | Anthropic Claude Code |
+| `aider` | Aider AI pair programming |
+
+### Auto-discovery
+
+Agents are auto-discovered on your PATH. Run to refresh:
+
+```bash
+ash discover
+```
+
+### Custom agents
+
+Add custom CLI-based agents in `ash.yml`:
+
+```yaml
+agents:
+  my-tool:
+    type: local-cli
+    cmd: my-tool
+    message_flag: "--prompt"
+    yes_flag: "--yes"
+```
+
+## REPL
+
+Run `ash` with no arguments to enter interactive mode:
+
+```bash
+$ ash
+ash> NAME = "world"
+ash> print "hello ${NAME}"
+hello world
+```
+
+Commands: `.help`, `.clear`, `.vars`, `.exit`. Up/down arrows navigate history. Multi-line blocks (`if`, `for`, `session`) auto-detect continuation.

@@ -20,6 +20,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build --verbose
       - run: cargo test --verbose
+      - name: Verify docs are in sync
+        working-directory: ./
+        run: |
+          node docs/assemble.js
+          git diff --exit-code README.md npm-package/README.md ash-vscode/README.md docs/website-reference.md
 
   release:
     name: Release (${{ matrix.target }})

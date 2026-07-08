@@ -213,6 +213,7 @@ impl Evaluator {
             Node::AgentCall(n) => self.eval_agent_call(n),
             Node::BinaryTry(n) => self.eval_binary_try(n),
             Node::EvalTry(n) => self.eval_eval_try(n),
+            Node::Evaluate(n) => self.eval_evaluate(n),
             Node::WaitBlock(n) => self.eval_wait(n),
             Node::Background(n) => self.eval_background(n),
             Node::Include(n) => self.eval_include(n),
@@ -246,7 +247,7 @@ impl Evaluator {
         Err(EvalError::Exit(ExitError { code }))
     }
 
-    fn eval_exec(&mut self, n: &Exec) -> Result<Value, EvalError> {
+    pub(super) fn eval_exec(&mut self, n: &Exec) -> Result<Value, EvalError> {
         let cmd_val = self.eval_expr(&n.cmd)?;
         let cmd_str = match &cmd_val {
             Value::String(s) => s.clone(),
@@ -582,9 +583,9 @@ mod tests {
 
     use crate::lang::ast::{
         ArrayLiteral, Background, BinaryExpr, BinaryTry, BoolLiteral, Break, CompactStmt, Continue,
-        DirBlock, ElseIf, Env, EvalTry, Exit, FnCall, FnDecl, ForStmt, IfStmt, Include,
-        IntLiteral, Pos, Print, Return, StringLiteral, UnaryExpr, VarAssign, VarRef, WaitBlock,
-        WhileStmt, AgentCall,
+        DirBlock, ElseIf, Env, Evaluate, EvaluateEvaluator, EvalTry, Exec, Exit, FnCall, FnDecl,
+        ForStmt, IfStmt, Include, IntLiteral, Pos, Print, Return, StringLiteral, UnaryExpr,
+        VarAssign, VarRef, WaitBlock, WhileStmt, AgentCall,
     };
 
     use crate::engine::{self, EchoDriver, LocalCliAdapter};
@@ -1685,5 +1686,170 @@ mod tests {
         let result = ev.eval_statement(&agent_call_node(string_lit("test")));
         // "echo" not registered, so it spawns /usr/bin/echo or similar
         assert!(result.is_ok());
+    }
+
+    // ===== Evaluate statement tests =====
+
+    fn evaluate_node(
+        body: Node,
+        evaluator: EvaluateEvaluator,
+        accept_by: Node,
+        upto: Node,
+    ) -> Node {
+        Node::Evaluate(Evaluate {
+            pos: Pos { line: 1, col: 1 },
+            body: Box::new(body),
+            evaluator,
+            accept_by: Box::new(accept_by),
+            upto: Box::new(upto),
+        })
+    }
+
+    fn fn_evaluator(name: &str, args: Vec<Node>) -> EvaluateEvaluator {
+        EvaluateEvaluator::FnCall(FnCall {
+            pos: Pos { line: 1, col: 1 },
+            name: name.to_string(),
+            args,
+        })
+    }
+
+    fn exec_evaluator(cmd: Node) -> EvaluateEvaluator {
+        EvaluateEvaluator::Exec(Exec {
+            pos: Pos { line: 1, col: 1 },
+            cmd: Box::new(cmd),
+        })
+    }
+
+    #[test]
+    fn test_evaluate_fn_accept() {
+        let mut ev = make_evaluator();
+        ev.stdout = Arc::new(Mutex::new(Box::new(std::io::sink())));
+
+        // fn return_score() { return 90 }
+        let fn_body = return_node(Some(int_lit(90)));
+        ev.eval_statement(&fn_decl_node("return_score", vec![], fn_body))
+            .unwrap();
+
+        let stmt = evaluate_node(
+            block(vec![var_assign("X", int_lit(1))]),
+            fn_evaluator("return_score", vec![]),
+            int_lit(85),
+            int_lit(3),
+        );
+
+        let result = ev.eval_statement(&stmt).unwrap();
+        assert_eq!(result, Value::Int(90));
+        assert_eq!(ev.get_var("score").unwrap(), Value::Int(90));
+        assert_eq!(ev.get_var("accepted").unwrap(), Value::Bool(true));
+    }
+
+    #[test]
+    fn test_evaluate_fn_exhaustion() {
+        let mut ev = make_evaluator();
+        ev.stdout = Arc::new(Mutex::new(Box::new(std::io::sink())));
+
+        // fn low_score() { return 50 }
+        let fn_body = return_node(Some(int_lit(50)));
+        ev.eval_statement(&fn_decl_node("low_score", vec![], fn_body))
+            .unwrap();
+
+        let stmt = evaluate_node(
+            block(vec![var_assign("Y", int_lit(2))]),
+            fn_evaluator("low_score", vec![]),
+            int_lit(85),
+            int_lit(3),
+        );
+
+        let result = ev.eval_statement(&stmt).unwrap();
+        assert_eq!(result, Value::Int(50));
+        assert_eq!(ev.get_var("score").unwrap(), Value::Int(50));
+        assert_eq!(ev.get_var("accepted").unwrap(), Value::Bool(false));
+    }
+
+    #[test]
+    fn test_evaluate_loop_variables() {
+        let mut ev = make_evaluator();
+        ev.stdout = Arc::new(Mutex::new(Box::new(std::io::sink())));
+
+        // fn check_attempt() { return $_attempt }
+        let fn_body = return_node(Some(var_ref("_attempt")));
+        ev.eval_statement(&fn_decl_node("check_attempt", vec![], fn_body))
+            .unwrap();
+
+        // Body records the attempt number
+        let stmt = evaluate_node(
+            block(vec![var_assign("CAPTURED_ATTEMPT", var_ref("_attempt"))]),
+            fn_evaluator("check_attempt", vec![]),
+            int_lit(100),
+            int_lit(3),
+        );
+
+        let result = ev.eval_statement(&stmt).unwrap();
+        // On the last attempt (attempt 3), score = 3 < 100, so exhausted
+        assert_eq!(result, Value::Int(3));
+        assert_eq!(ev.get_var("score").unwrap(), Value::Int(3));
+        assert_eq!(ev.get_var("accepted").unwrap(), Value::Bool(false));
+    }
+
+    #[test]
+    fn test_evaluate_body_side_effects() {
+        let mut ev = make_evaluator();
+        ev.stdout = Arc::new(Mutex::new(Box::new(std::io::sink())));
+
+        // fn score_sidefx() { return 95 }
+        let fn_body = return_node(Some(int_lit(95)));
+        ev.eval_statement(&fn_decl_node("score_sidefx", vec![], fn_body))
+            .unwrap();
+
+        // Body sets a variable that should persist after evaluate
+        let stmt = evaluate_node(
+            block(vec![var_assign("SIDE", int_lit(42))]),
+            fn_evaluator("score_sidefx", vec![]),
+            int_lit(90),
+            int_lit(2),
+        );
+
+        let result = ev.eval_statement(&stmt).unwrap();
+        assert_eq!(result, Value::Int(95));
+        assert_eq!(ev.get_var("SIDE").unwrap(), Value::Int(42));
+    }
+
+    #[test]
+    fn test_evaluate_exec_evaluator() {
+        let mut ev = make_evaluator();
+        ev.stdout = Arc::new(Mutex::new(Box::new(std::io::sink())));
+
+        let stmt = evaluate_node(
+            block(vec![var_assign("Z", int_lit(3))]),
+            exec_evaluator(string_lit("echo SCORE: 88")),
+            int_lit(80),
+            int_lit(2),
+        );
+
+        let result = ev.eval_statement(&stmt).unwrap();
+        assert_eq!(result, Value::Int(88));
+        assert_eq!(ev.get_var("score").unwrap(), Value::Int(88));
+        assert_eq!(ev.get_var("accepted").unwrap(), Value::Bool(true));
+    }
+
+    #[test]
+    fn test_evaluate_extract_findings() {
+        let mut ev = make_evaluator();
+        ev.stdout = Arc::new(Mutex::new(Box::new(std::io::sink())));
+
+        let output = "SCORE: 75\nFINDINGS:\nImprove variable naming\nAdd error handling\n";
+        let cmd = format!("echo '{}'", output.replace('\'', "'\\''"));
+        let stmt = evaluate_node(
+            block(vec![]),
+            exec_evaluator(string_lit(&cmd)),
+            int_lit(80),
+            int_lit(2),
+        );
+
+        let _result = ev.eval_statement(&stmt).unwrap();
+        // Exhausted after all attempts — feedback should contain findings
+        assert_eq!(ev.get_var("accepted").unwrap(), Value::Bool(false));
+        let score = ev.get_var("score").unwrap();
+        assert_eq!(score, Value::Int(75));
     }
 }

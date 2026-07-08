@@ -144,6 +144,7 @@ impl Parser {
                 "fn" => self.parse_fn_decl(),
                 "do" => self.parse_do(),
                 "try" => self.parse_try(),
+                "evaluate" => self.parse_evaluate(),
                 "within" => self.parse_within(),
                 "wait" => self.parse_wait(),
                 "exec" => self.parse_exec(),
@@ -584,6 +585,166 @@ impl Parser {
             body: Box::new(Node::Block(body)),
             fail: fail_block.map(|b| Box::new(Node::Block(b))),
             max: Box::new(max_expr),
+        }))
+    }
+
+    fn parse_evaluate(&mut self) -> Result<Node, String> {
+        let tok = self.advance();
+        self.skip_newlines();
+        let body = self.parse_block()?;
+        self.skip_newlines();
+
+        let by_tok = self.expect(TokenKind::TkIdent)?;
+        if by_tok.literal != "by" {
+            return Err(format!(
+                "expected 'by' after evaluate body at {}:{}",
+                tok.line, tok.col
+            ));
+        }
+        self.skip_newlines();
+
+        let evaluator = if self.current().kind == TokenKind::TkAt {
+            // Agent evaluator: @"prompt" [with <agent> [subagent <name>]] [using <model>]
+            let prompt = self.parse_primary()?;
+            let mut agent = AgentCall {
+                pos: Pos { line: tok.line, col: tok.col },
+                prompt: Box::new(prompt),
+                agent: None,
+                subagent: String::new(),
+                model: None,
+                dir: None,
+                compact: None,
+            };
+
+            if self.current().kind == TokenKind::TkIdent
+                && self.current().literal == "with"
+            {
+                self.advance();
+                let ident = self.expect(TokenKind::TkIdent)?;
+                if ident.literal == "subagent" {
+                    agent.subagent = self.parse_hyphenated_ident()?;
+                } else {
+                    let mut agent_name = ident.literal;
+                    while self.current().kind == TokenKind::TkMinus
+                        && self.peek().kind == TokenKind::TkIdent
+                    {
+                        agent_name.push('-');
+                        self.advance();
+                        let part = self.expect(TokenKind::TkIdent)?;
+                        agent_name.push_str(&part.literal);
+                    }
+                    agent.agent = Some(agent_name);
+                    if self.current().kind == TokenKind::TkIdent
+                        && self.current().literal == "subagent"
+                    {
+                        self.advance();
+                        agent.subagent = self.parse_hyphenated_ident()?;
+                    }
+                }
+            }
+
+            if self.current().kind == TokenKind::TkIdent
+                && self.current().literal == "using"
+            {
+                self.advance();
+                if self.current().kind == TokenKind::TkIdent {
+                    let mut model_name = self.current().literal.clone();
+                    self.advance();
+                    while (self.current().kind == TokenKind::TkMinus || self.current().kind == TokenKind::TkSlash)
+                        && self.peek().kind == TokenKind::TkIdent
+                    {
+                        if self.current().kind == TokenKind::TkMinus {
+                            model_name.push('-');
+                        } else {
+                            model_name.push('/');
+                        }
+                        self.advance();
+                        let part = self.expect(TokenKind::TkIdent)?;
+                        model_name.push_str(&part.literal);
+                    }
+                    agent.model = Some(Box::new(Node::StringLiteral(StringLiteral {
+                        pos: Pos { line: self.current().line, col: self.current().col },
+                        value: model_name,
+                        interps: vec![],
+                    })));
+                } else {
+                    let model = self.parse_primary()?;
+                    agent.model = Some(Box::new(model));
+                }
+            }
+
+            EvaluateEvaluator::Agent(agent)
+        } else if self.current().kind == TokenKind::TkIdent
+            && self.current().literal == "exec"
+        {
+            // Command evaluator
+            self.advance();
+            let cmd_expr = self.parse_expr()?;
+            EvaluateEvaluator::Exec(Exec {
+                pos: Pos { line: tok.line, col: tok.col },
+                cmd: Box::new(cmd_expr),
+            })
+        } else if self.current().kind == TokenKind::TkIdent
+            && self.peek().kind == TokenKind::TkLParen
+        {
+            // Function evaluator
+            let name_tok = self.advance();
+            let fn_call = self.parse_fn_call_args(name_tok)?;
+            match fn_call {
+                Node::FnCall(fc) => EvaluateEvaluator::FnCall(fc),
+                _ => {
+                    return Err(format!(
+                        "expected function call at {}:{}",
+                        tok.line, tok.col
+                    ))
+                }
+            }
+        } else {
+            return Err(format!(
+                "expected evaluator clause (start with @, exec, or function name) at {}:{}",
+                tok.line, tok.col
+            ));
+        };
+
+        self.skip_newlines();
+
+        let accept_tok = self.expect(TokenKind::TkIdent)?;
+        if accept_tok.literal != "accept" {
+            return Err(format!(
+                "expected 'accept' at {}:{}",
+                tok.line, tok.col
+            ));
+        }
+        self.skip_newlines();
+
+        let by_tok2 = self.expect(TokenKind::TkIdent)?;
+        if by_tok2.literal != "by" {
+            return Err(format!(
+                "expected 'by' after 'accept' at {}:{}",
+                tok.line, tok.col
+            ));
+        }
+        self.skip_newlines();
+
+        let accept_by = self.parse_expr()?;
+        self.skip_newlines();
+
+        let upto_tok = self.expect(TokenKind::TkIdent)?;
+        if upto_tok.literal != "upto" {
+            return Err(format!(
+                "expected 'upto' at {}:{}",
+                tok.line, tok.col
+            ));
+        }
+
+        let max_expr = self.parse_expr()?;
+
+        Ok(Node::Evaluate(Evaluate {
+            pos: Pos { line: tok.line, col: tok.col },
+            body: Box::new(Node::Block(body)),
+            evaluator,
+            accept_by: Box::new(accept_by),
+            upto: Box::new(max_expr),
         }))
     }
 
@@ -1500,6 +1661,79 @@ mod tests {
         match &script.body[0] {
             Node::DirBlock(_) => {}
             other => panic!("expected DirBlock, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_evaluate_agent() {
+        let src = r#"evaluate { print 1 } by @"prompt.md" with echo using sonnet accept by 85 upto 3"#;
+        let script = parse_str(src);
+        match &script.body[0] {
+            Node::Evaluate(e) => {
+                match &e.evaluator {
+                    EvaluateEvaluator::Agent(a) => {
+                        assert_eq!(a.agent, Some("echo".to_string()));
+                        assert!(a.model.is_some());
+                    }
+                    other => panic!("expected Agent evaluator, got {:?}", other),
+                }
+                match &*e.upto {
+                    Node::IntLiteral(i) => assert_eq!(i.value, 3),
+                    other => panic!("expected IntLiteral, got {:?}", other),
+                }
+            }
+            other => panic!("expected Evaluate, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_evaluate_fn() {
+        let src = r#"evaluate { print 1 } by score_fn() accept by 90 upto 5"#;
+        let script = parse_str(src);
+        match &script.body[0] {
+            Node::Evaluate(e) => {
+                match &e.evaluator {
+                    EvaluateEvaluator::FnCall(f) => {
+                        assert_eq!(f.name, "score_fn");
+                        assert_eq!(f.args.len(), 0);
+                    }
+                    other => panic!("expected FnCall evaluator, got {:?}", other),
+                }
+            }
+            other => panic!("expected Evaluate, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_evaluate_exec() {
+        let src = r#"evaluate { print 1 } by exec "eval.py --strict" accept by 70 upto 2"#;
+        let script = parse_str(src);
+        match &script.body[0] {
+            Node::Evaluate(e) => {
+                match &e.evaluator {
+                    EvaluateEvaluator::Exec(ex) => {
+                        match &*ex.cmd {
+                            Node::StringLiteral(s) => assert_eq!(s.value, "eval.py --strict"),
+                            other => panic!("expected StringLiteral cmd, got {:?}", other),
+                        }
+                    }
+                    other => panic!("expected Exec evaluator, got {:?}", other),
+                }
+            }
+            other => panic!("expected Evaluate, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_evaluate_no_by_errors() {
+        let cases = [
+            "evaluate { print 1 }",
+            "evaluate { print 1 } accept by 85 upto 3",
+        ];
+        for src in &cases {
+            let tokens = crate::lang::lexer::tokenize(src).unwrap();
+            let result = parse(tokens);
+            assert!(result.is_err(), "expected parse error for {:?}", src);
         }
     }
 }
