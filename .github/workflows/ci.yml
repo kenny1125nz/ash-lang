@@ -29,7 +29,11 @@ jobs:
         run: |
           git config user.name "ash CI"
           git config user.email "ci@ash-lang.com"
-          git add README.md npm-package/README.md ash-vscode/README.md web-site/reference.html docs/website-reference.md
+          git add "${{ github.workspace }}/README.md" \
+              "${{ github.workspace }}/npm-package/README.md" \
+              "${{ github.workspace }}/ash-vscode/README.md" \
+              "${{ github.workspace }}/web-site/reference.html" \
+              "${{ github.workspace }}/docs/website-reference.md"
           git diff --cached --quiet || git commit -m "sync generated docs [skip ci]"
 
   release:
@@ -133,8 +137,9 @@ jobs:
           cd ash-wasm
           wasm-pack build --target web --release
           mkdir -p ../web-site/wasm
-          cp pkg/ash_wasm_bg.wasm ../web-site/wasm/ash_wasm_bg.wasm
-          cp pkg/ash_wasm_bg.js ../web-site/wasm/ash_wasm_bg.js
+          echo "pkg contents:" && ls -la pkg/
+          for f in pkg/*.wasm; do cp "$f" ../web-site/wasm/"$(basename "$f")"; done
+          for f in pkg/*.js; do cp "$f" ../web-site/wasm/"$(basename "$f")"; done
       - name: Deploy to Cloudflare Pages
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
