@@ -6,3 +6,4 @@ web-site/wasm/
 .wrangler/
 .aider*
 *.vsix
+.VSCodeCounter/

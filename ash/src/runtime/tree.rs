@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 
 use log::{debug, info, warn};
@@ -26,6 +27,24 @@ pub struct Task {
     pub on_fail: String,
 }
 
+/// A group of tasks sharing the same numeric prefix at the same directory level.
+/// Single-file groups execute sequentially; multi-file groups execute in parallel.
+/// If files share the prefix with a subdirectory, the subdirectory is walked
+/// and its groups run on a separate thread alongside the files.
+#[derive(Debug, Clone)]
+pub struct TaskGroup {
+    pub files: Vec<Task>,
+    pub subdir: Option<Vec<TaskGroup>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ParallelMode {
+    /// Run parallel groups without prompting
+    Allow,
+    /// Prompt for confirmation if interactive; error if non-interactive
+    Prompt,
+}
+
 #[derive(Debug, Clone)]
 pub struct WalkConfig {
     pub root: PathBuf,
@@ -33,6 +52,7 @@ pub struct WalkConfig {
     pub continue_on_error: bool,
     pub default_agent: String,
     pub default_model: String,
+    pub parallel: ParallelMode,
 }
 
 impl Default for WalkConfig {
@@ -43,6 +63,7 @@ impl Default for WalkConfig {
             continue_on_error: false,
             default_agent: "echo".to_string(),
             default_model: String::new(),
+            parallel: ParallelMode::Prompt,
         }
     }
 }
@@ -189,27 +210,24 @@ fn read_task(file_path: &Path, content: &str) -> Option<Task> {
     })
 }
 
-#[derive(Debug, Clone)]
-enum Entry {
-    File(PathBuf),
-    Dir(PathBuf),
+fn walk_dir(dir: &Path) -> Result<Vec<TaskGroup>, String> {
+    let mut groups: Vec<TaskGroup> = Vec::new();
+    walk_dir_into(dir, &mut groups, dir)?;
+    Ok(groups)
 }
 
-fn walk_dir(dir: &Path) -> Result<Vec<Task>, String> {
-    let mut tasks: Vec<Task> = Vec::new();
-    walk_dir_into(dir, &mut tasks, dir)?;
-    Ok(tasks)
-}
-
-fn walk_dir_into(dir: &Path, tasks: &mut Vec<Task>, root: &Path) -> Result<(), String> {
+fn walk_dir_into(dir: &Path, groups: &mut Vec<TaskGroup>, root: &Path) -> Result<(), String> {
     let entries = match fs::read_dir(dir) {
         Ok(e) => e,
         Err(_) => return Ok(()),
     };
 
-    let mut sorted: Vec<Entry> = Vec::new();
+    let mut file_entries: Vec<PathBuf> = Vec::new();
+    let mut dir_entries: Vec<PathBuf> = Vec::new();
     let mut skipped: Vec<(String, String)> = Vec::new();
-    let mut prefix_map: std::collections::HashMap<u64, Vec<String>> = std::collections::HashMap::new();
+    let mut file_prefix_map: std::collections::HashMap<u64, Vec<PathBuf>> = std::collections::HashMap::new();
+    let mut dir_prefix_set: std::collections::HashSet<u64> = std::collections::HashSet::new();
+    let mut prefix_names: std::collections::HashMap<u64, Vec<String>> = std::collections::HashMap::new();
 
     for entry in entries.flatten() {
         let name = entry.file_name();
@@ -220,20 +238,21 @@ fn walk_dir_into(dir: &Path, tasks: &mut Vec<Task>, root: &Path) -> Result<(), S
         let path = entry.path();
         if path.is_dir() {
             if let Some(prefix) = extract_numeric_prefix(&name_str) {
-                prefix_map.entry(prefix).or_default().push(format!("{}/", name_str));
+                dir_prefix_set.insert(prefix);
+                prefix_names.entry(prefix).or_default().push(format!("{}/", name_str));
             }
-            sorted.push(Entry::Dir(path));
+            dir_entries.push(path);
         } else if path.is_file() {
             if let Some(ext) = file_ext(&name_str) {
                 if !is_task_file(&name_str) {
                     skipped.push(("no-prefix".to_string(), name_str));
                 } else {
-                    if let Some(prefix) = extract_numeric_prefix(
-                        name_str.strip_suffix(ext).unwrap_or(&name_str),
-                    ) {
-                        prefix_map.entry(prefix).or_default().push(name_str.clone());
+                    let stem = name_str.strip_suffix(ext).unwrap_or(&name_str);
+                    if let Some(prefix) = extract_numeric_prefix(stem) {
+                        file_prefix_map.entry(prefix).or_default().push(path.clone());
+                        prefix_names.entry(prefix).or_default().push(name_str.clone());
                     }
-                    sorted.push(Entry::File(path));
+                    file_entries.push(path);
                 }
             } else {
                 skipped.push(("non-task".to_string(), name_str));
@@ -241,40 +260,15 @@ fn walk_dir_into(dir: &Path, tasks: &mut Vec<Task>, root: &Path) -> Result<(), S
         }
     }
 
-    let conflicts: Vec<_> = prefix_map
-        .into_iter()
-        .filter(|(_, names)| names.len() > 1)
+    // Track which prefixes have mixed files+dirs (these become combined parallel groups)
+    let mixed_prefixes: std::collections::HashSet<u64> = file_prefix_map
+        .keys()
+        .copied()
+        .filter(|p| dir_prefix_set.contains(p))
         .collect();
-    if !conflicts.is_empty() {
-        let rel = dir.strip_prefix(root).unwrap_or(dir);
-        let dir_label = if rel.as_os_str().is_empty() {
-            String::new()
-        } else {
-            format!("{}/", rel.display())
-        };
-        let mut msg = format!(
-            "numbering conflict in {}\n",
-            if dir_label.is_empty() {
-                "root directory".to_string()
-            } else {
-                dir_label.trim_end_matches('/').to_string()
-            }
-        );
-        for (prefix, names) in &conflicts {
-            msg.push_str(&format!(
-                "  prefix {}: {}\n",
-                prefix,
-                names.join(", ")
-            ));
-        }
-        msg.push_str("suggestion: ensure every file and directory at the same level has a unique numeric prefix");
-        return Err(msg);
-    }
 
     for (reason, name) in &skipped {
-        let rel = dir
-            .strip_prefix(root)
-            .unwrap_or(dir);
+        let rel = dir.strip_prefix(root).unwrap_or(dir);
         if rel.as_os_str().is_empty() {
             println!("[skip] {}: {}", reason, name);
         } else {
@@ -282,23 +276,30 @@ fn walk_dir_into(dir: &Path, tasks: &mut Vec<Task>, root: &Path) -> Result<(), S
         }
     }
 
-    sorted.sort_by_key(|e| {
-        let name = match e {
-            Entry::File(p) | Entry::Dir(p) => {
-                p.file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_default()
-            }
-        };
+    // Sort file entries by prefix
+    file_entries.sort_by_key(|p| {
+        let name = p.file_name().map(|n| n.to_string_lossy()).unwrap_or_default();
         extract_numeric_prefix(&name).unwrap_or(u64::MAX)
     });
 
-    for entry in sorted {
-        match entry {
-            Entry::Dir(d) => {
-                walk_dir_into(&d, tasks, root)?;
-            }
-            Entry::File(f) => {
+    // Sort directory entries by prefix
+    dir_entries.sort_by_key(|p| {
+        let name = p.file_name().map(|n| n.to_string_lossy()).unwrap_or_default();
+        extract_numeric_prefix(&name).unwrap_or(u64::MAX)
+    });
+
+    // Merge file groups and directory groups in prefix order
+    let mut all_keys: std::collections::BTreeSet<u64> = std::collections::BTreeSet::new();
+    for p in file_prefix_map.keys() { all_keys.insert(*p); }
+    for p in &dir_prefix_set { all_keys.insert(*p); }
+
+    for prefix in all_keys {
+        let is_mixed = mixed_prefixes.contains(&prefix);
+
+        // Process file groups for this prefix
+        if let Some(files) = file_prefix_map.remove(&prefix) {
+            let mut group_tasks: Vec<Task> = Vec::new();
+            for f in files {
                 debug!("tree — reading file {}", f.display());
                 let content = match fs::read_to_string(&f) {
                     Ok(c) => c,
@@ -306,11 +307,9 @@ fn walk_dir_into(dir: &Path, tasks: &mut Vec<Task>, root: &Path) -> Result<(), S
                 };
                 if let Some(task) = read_task(&f, &content) {
                     debug!("tree — loaded task {}", f.display());
-                    tasks.push(task);
+                    group_tasks.push(task);
                 } else {
-                    let rel = f
-                        .strip_prefix(root)
-                        .unwrap_or(&f);
+                    let rel = f.strip_prefix(root).unwrap_or(&f);
                     if rel.as_os_str().is_empty() {
                         println!("[skip] empty: {}", f.file_name().map(|n| n.to_string_lossy()).unwrap_or_default());
                     } else {
@@ -318,191 +317,434 @@ fn walk_dir_into(dir: &Path, tasks: &mut Vec<Task>, root: &Path) -> Result<(), S
                     }
                 }
             }
+            if !group_tasks.is_empty() {
+                group_tasks.sort_by_key(|t| {
+                    t.path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()
+                });
+                if is_mixed {
+                    // Walk the subdirectory and embed its groups
+                    let dirs_at_prefix: Vec<PathBuf> = dir_entries
+                        .iter()
+                        .filter(|d| {
+                            let name = d.file_name().map(|n| n.to_string_lossy()).unwrap_or_default();
+                            extract_numeric_prefix(&name) == Some(prefix)
+                        })
+                        .cloned()
+                        .collect();
+                    let mut subdir_groups: Vec<TaskGroup> = Vec::new();
+                    for d in dirs_at_prefix {
+                        walk_dir_into(&d, &mut subdir_groups, root)?;
+                    }
+                    groups.push(TaskGroup {
+                        files: group_tasks,
+                        subdir: Some(subdir_groups),
+                    });
+                } else {
+                    groups.push(TaskGroup {
+                        files: group_tasks,
+                        subdir: None,
+                    });
+                }
+            }
+        }
+
+        // Process directory-only prefixes (no file at this prefix)
+        if !is_mixed && dir_prefix_set.contains(&prefix) {
+            let dirs_at_prefix: Vec<PathBuf> = dir_entries
+                .iter()
+                .filter(|d| {
+                    let name = d.file_name().map(|n| n.to_string_lossy()).unwrap_or_default();
+                    extract_numeric_prefix(&name) == Some(prefix)
+                })
+                .cloned()
+                .collect();
+            for d in dirs_at_prefix {
+                walk_dir_into(&d, groups, root)?;
+            }
         }
     }
+
     Ok(())
+}
+
+fn confirm_parallel(group_count: usize) -> bool {
+    if !std::io::stdin().is_terminal() {
+        return false;
+    }
+    print!(
+        "\n{} parallel group(s) detected. Run them in parallel? [y/N] ",
+        group_count,
+    );
+    io::stdout().flush().ok();
+    let mut input = String::new();
+    io::stdin().read_line(&mut input).ok();
+    input.trim().eq_ignore_ascii_case("y")
+}
+
+fn execute_md_task(task: &Task, config: &WalkConfig, eval: &mut Evaluator) -> bool {
+    let agent_name = task.agent.as_deref().unwrap_or(&config.default_agent);
+    let agent = engine::get(agent_name);
+    let model = task.model.as_deref().unwrap_or(&config.default_model);
+    let prompt = interpolate_prompt(&task.prompt, eval);
+
+    let req = ExecuteRequest {
+        prompt,
+        model: model.to_string(),
+        dir: String::new(),
+        session: false,
+        yes: false,
+    };
+
+    let resp = if let Some(eng) = agent {
+        eng.execute(&req)
+    } else {
+        ExecuteResponse {
+            stdout: String::new(),
+            stderr: format!("agent '{}' not found in registry", agent_name),
+            exit_code: -1,
+        }
+    };
+
+    if resp.exit_code == 0 {
+        eprintln!("  [ok]");
+        true
+    } else {
+        eprintln!("  [fail] exit={} {}", resp.exit_code, resp.stderr.trim());
+        false
+    }
+}
+
+fn execute_ash_task(task: &Task, _config: &WalkConfig, eval: &mut Evaluator) -> bool {
+    let script = match parse_str(&task.content) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("  [fail] parse error: {}", e);
+            return false;
+        }
+    };
+
+    if let Some(ref shebang) = script.shebang {
+        eval.set_default_agent(&shebang.engine);
+        if !shebang.model.is_empty() {
+            eval.set_default_model(&shebang.model);
+        }
+    }
+
+    match eval.eval_script(&script) {
+        Ok(()) => {
+            eprintln!("  [ok]");
+            true
+        }
+        Err(EvalError::Exit(ex)) if ex.code == 0 => {
+            eprintln!("  [ok]");
+            true
+        }
+        Err(EvalError::Exit(ex)) => {
+            eprintln!("  [fail] exit={}", ex.code);
+            false
+        }
+        Err(EvalError::Msg(e)) => {
+            eprintln!("  [fail] {}", e);
+            false
+        }
+    }
+}
+
+fn execute_task(task: &Task, config: &WalkConfig, eval: &mut Evaluator) -> bool {
+    let rel_path = task.path.strip_prefix(&config.root).unwrap_or(&task.path);
+    debug!("tree — executing {} (kind={:?})", rel_path.display(), task.kind);
+    match task.kind {
+        TaskKind::Markdown => execute_md_task(task, config, eval),
+        TaskKind::Ash => execute_ash_task(task, config, eval),
+    }
+}
+
+fn execute_task_isolated(task: &Task, config: &WalkConfig, parent_eval: &Evaluator) -> bool {
+    let scope = parent_eval.current_scope.clone();
+    let mut eval = Evaluator {
+        current_scope: scope.clone(),
+        global_scope: parent_eval.global_scope.clone(),
+        stdout: parent_eval.stdout.clone(),
+        stderr: parent_eval.stderr.clone(),
+        executor: crate::runtime::executor::Executor::new(),
+        compact_config: parent_eval.compact_config.clone(),
+        signal: parent_eval.signal.clone(),
+        bg_handles: parent_eval.bg_handles.clone(),
+        default_agent: parent_eval.default_agent.clone(),
+        default_model: parent_eval.default_model.clone(),
+        session_depth: 0,
+        within_stack: Vec::new(),
+        telemetry_ctx: None,
+        script_args: Vec::new(),
+    };
+    execute_task(task, config, &mut eval)
+}
+
+fn dry_run_group(group: &TaskGroup, index: usize, total: usize, config: &WalkConfig) {
+    let file_count = group.files.len();
+    let has_subdir = group.subdir.is_some();
+    let label = if file_count > 1 && !has_subdir {
+        format!("[parallel: {} tasks]", file_count)
+    } else if has_subdir && file_count > 0 {
+        format!("[parallel: {} files + subdir]", file_count)
+    } else if has_subdir {
+        String::new()
+    } else {
+        String::new()
+    };
+
+    for (j, task) in group.files.iter().enumerate() {
+        let agent = task.agent.as_deref().unwrap_or(&config.default_agent);
+        let model = task.model.as_deref().unwrap_or(&config.default_model);
+        let model_display = if model.is_empty() { "default" } else { model };
+        match task.kind {
+            TaskKind::Markdown => {
+                let preview: String = task.prompt.chars().take(80).collect();
+                let preview = if task.prompt.len() > 80 {
+                    format!("{}...", preview)
+                } else {
+                    preview
+                };
+                if j == 0 && !label.is_empty() {
+                    println!("[{}/{}] {} | type=md agent={} model={} on_fail={} {}",
+                        index + 1, total, task.path.display(), agent, model_display, task.on_fail, label);
+                } else {
+                    println!("[{}/{}] {} | type=md agent={} model={} on_fail={}",
+                        index + 1, total, task.path.display(), agent, model_display, task.on_fail);
+                }
+                println!("       {}", preview);
+            }
+            TaskKind::Ash => {
+                let preview: String = task.content.chars().take(80).collect();
+                let preview = if task.content.len() > 80 {
+                    format!("{}...", preview)
+                } else {
+                    preview
+                };
+                if j == 0 && !label.is_empty() {
+                    println!("[{}/{}] {} | type=ash agent={} model={} {}",
+                        index + 1, total, task.path.display(), agent, model_display, label);
+                } else {
+                    println!("[{}/{}] {} | type=ash agent={} model={}",
+                        index + 1, total, task.path.display(), agent, model_display);
+                }
+                println!("       {}", preview);
+            }
+        }
+    }
+
+    if has_subdir {
+        let subdir_groups = group.subdir.as_ref().unwrap();
+        println!("       [subdirectory with {} group(s)]", subdir_groups.len());
+    }
+}
+
+fn count_tasks_in_groups(groups: &[TaskGroup]) -> usize {
+    let mut count = 0;
+    for g in groups {
+        count += g.files.len();
+        if let Some(ref sub) = g.subdir {
+            count += count_tasks_in_groups(sub);
+        }
+    }
+    count
+}
+
+fn has_parallel_work(group: &TaskGroup) -> bool {
+    group.files.len() > 1 || group.subdir.is_some()
+}
+
+fn execute_groups_isolated<'a>(
+    groups: &'a [TaskGroup],
+    config: &WalkConfig,
+    parent_eval: &Evaluator,
+    result: &mut Vec<(bool, Option<&'a Task>)>,
+) {
+    let scope = parent_eval.current_scope.clone();
+    let mut eval = Evaluator {
+        current_scope: scope.clone(),
+        global_scope: parent_eval.global_scope.clone(),
+        stdout: parent_eval.stdout.clone(),
+        stderr: parent_eval.stderr.clone(),
+        executor: crate::runtime::executor::Executor::new(),
+        compact_config: parent_eval.compact_config.clone(),
+        signal: parent_eval.signal.clone(),
+        bg_handles: parent_eval.bg_handles.clone(),
+        default_agent: parent_eval.default_agent.clone(),
+        default_model: parent_eval.default_model.clone(),
+        session_depth: 0,
+        within_stack: Vec::new(),
+        telemetry_ctx: None,
+        script_args: Vec::new(),
+    };
+
+    for group in groups {
+        if group.files.is_empty() && group.subdir.is_none() {
+            continue;
+        }
+
+        if group.files.len() == 1 && group.subdir.is_none() {
+            let ok = execute_task(&group.files[0], config, &mut eval);
+            result.push((ok, Some(&group.files[0])));
+        } else if has_parallel_work(group) {
+            let results: Vec<(bool, Option<&'a Task>)> = std::thread::scope(|s| {
+                let mut handles: Vec<std::thread::ScopedJoinHandle<'_, (bool, Option<&'a Task>)>> = Vec::new();
+                for task in &group.files {
+                    let handle = s.spawn(move || {
+                        let ok = execute_task_isolated(task, config, parent_eval);
+                        (ok, Some(task))
+                    });
+                    handles.push(handle);
+                }
+                if let Some(ref subdir_groups) = group.subdir {
+                    let handle = s.spawn(move || {
+                        let mut sub_results = Vec::new();
+                        execute_groups_isolated(subdir_groups, config, parent_eval, &mut sub_results);
+                        (sub_results.iter().all(|(ok, _)| *ok), None)
+                    });
+                    handles.push(handle);
+                }
+                handles.into_iter().map(|h| h.join().unwrap_or((false, None))).collect()
+            });
+
+            for (ok, maybe_task) in results {
+                result.push((ok, maybe_task));
+            }
+        }
+    }
 }
 
 pub fn run_tree(config: WalkConfig, eval: &mut Evaluator) -> i32 {
     info!("engine — walking task tree at {}", config.root.display());
 
-    let tasks = match walk_dir(&config.root) {
-        Ok(t) => t,
+    let groups = match walk_dir(&config.root) {
+        Ok(g) => g,
         Err(e) => {
             eprintln!("error: {}", e);
             return 1;
         }
     };
-    let total = tasks.len();
 
-    if total == 0 {
+    if groups.is_empty() {
         warn!("No tasks found in {}", config.root.display());
         return 0;
     }
 
-    info!("engine — dispatching {} tasks", total);
+    let total_groups = groups.len();
+    let total_tasks = count_tasks_in_groups(&groups);
+    info!("engine — dispatching {} groups ({} tasks)", total_groups, total_tasks);
 
     if config.dry_run {
-        for (i, task) in tasks.iter().enumerate() {
-            let agent = task.agent.as_deref().unwrap_or(&config.default_agent);
-            let model = task.model.as_deref().unwrap_or(&config.default_model);
-            let model_display = if model.is_empty() { "default" } else { model };
-            match task.kind {
-                TaskKind::Markdown => {
-                    let preview: String = task.prompt.chars().take(80).collect();
-                    let preview = if task.prompt.len() > 80 {
-                        format!("{}...", preview)
-                    } else {
-                        preview
-                    };
-                    println!(
-                        "[{}/{}] {} | type=md agent={} model={} on_fail={}",
-                        i + 1,
-                        total,
-                        task.path.display(),
-                        agent,
-                        model_display,
-                        task.on_fail,
-                    );
-                    println!("       {}", preview);
-                }
-                TaskKind::Ash => {
-                    let preview: String = task.content.chars().take(80).collect();
-                    let preview = if task.content.len() > 80 {
-                        format!("{}...", preview)
-                    } else {
-                        preview
-                    };
-                    println!(
-                        "[{}/{}] {} | type=ash agent={} model={}",
-                        i + 1,
-                        total,
-                        task.path.display(),
-                        agent,
-                        model_display,
-                    );
-                    println!("       {}", preview);
-                }
-            }
+        for (i, group) in groups.iter().enumerate() {
+            dry_run_group(group, i, total_groups, &config);
         }
-        println!("{} tasks (dry-run)", total);
+        println!("{} tasks (dry-run)", total_tasks);
         return 0;
+    }
+
+    // Check if there are parallel groups and handle confirmation
+    let parallel_groups: Vec<&TaskGroup> = groups.iter().filter(|g| has_parallel_work(g)).collect();
+    let parallel_ok = if parallel_groups.is_empty() {
+        true
+    } else if config.parallel == ParallelMode::Allow {
+        true
+    } else if confirm_parallel(parallel_groups.len()) {
+        true
+    } else {
+        eprintln!(
+            "error: {} parallel group(s) detected. Use --yes to allow parallel execution.",
+            parallel_groups.len()
+        );
+        return 1;
+    };
+
+    if !parallel_ok {
+        return 1;
     }
 
     let mut passed = 0;
     let mut failed = 0;
 
-    for (i, task) in tasks.iter().enumerate() {
-        let rel_path = task
-            .path
-            .strip_prefix(&config.root)
-            .unwrap_or(&task.path)
-            .display();
-        info!("engine — dispatching task {}", rel_path);
-        debug!("task {}/{}: {} (kind={:?})", i + 1, total, rel_path, task.kind);
+    for (i, group) in groups.iter().enumerate() {
+        let file_count = group.files.len();
+        let has_subdir = group.subdir.is_some();
+        info!("engine — dispatching group {}/{} ({} files, subdir={})", i + 1, total_groups, file_count, has_subdir);
 
-        match task.kind {
-            TaskKind::Markdown => {
-                let agent_name = task.agent.as_deref().unwrap_or(&config.default_agent);
-                let agent = engine::get(agent_name);
-
-                let model = task.model.as_deref().unwrap_or(&config.default_model);
-
-                let prompt = interpolate_prompt(&task.prompt, eval);
-
-                let req = ExecuteRequest {
-                    prompt,
-                    model: model.to_string(),
-                    dir: String::new(),
-                    session: false,
-                    yes: false,
-                };
-
-                let resp = if let Some(eng) = agent {
-                    eng.execute(&req)
-                } else {
-                    ExecuteResponse {
-                        stdout: String::new(),
-                        stderr: format!("agent '{}' not found in registry", agent_name),
-                        exit_code: -1,
-                    }
-                };
-
-                if resp.exit_code == 0 {
-                    eprintln!("[ok]");
-                    passed += 1;
-                } else {
-                    eprintln!(
-                        "[fail] exit={} {}",
-                        resp.exit_code,
-                        resp.stderr.trim()
-                    );
-                    failed += 1;
-                    if task.on_fail == "stop" && !config.continue_on_error {
-                        eprintln!(
-                            "stopping after failure ({} passed, {} failed)",
-                            passed, failed
-                        );
-                        return 1;
-                    }
+        if file_count == 1 && !has_subdir {
+            // Sequential execution
+            let task = &group.files[0];
+            let rel_path = task.path.strip_prefix(&config.root).unwrap_or(&task.path);
+            eprintln!("[{}] {}", i + 1, rel_path.display());
+            let ok = execute_task(task, &config, eval);
+            if ok {
+                passed += 1;
+            } else {
+                failed += 1;
+                if task.on_fail == "stop" && !config.continue_on_error {
+                    eprintln!("stopping after failure ({} passed, {} failed)", passed, failed);
+                    return 1;
                 }
             }
-            TaskKind::Ash => {
-                let script = match parse_str(&task.content) {
-                    Ok(s) => s,
-                    Err(e) => {
-                        eprintln!("[fail] parse error: {}", e);
-                        failed += 1;
-                        if task.on_fail == "stop" && !config.continue_on_error {
-                            eprintln!(
-                                "stopping after failure ({} passed, {} failed)",
-                                passed, failed
-                            );
-                            return 1;
-                        }
-                        continue;
-                    }
-                };
+        } else if has_parallel_work(group) {
+            // Parallel execution
+            eprintln!("[{}] parallel: {} files{}",
+                i + 1, file_count,
+                if has_subdir { " + subdir" } else { "" });
+            for task in &group.files {
+                let rel_path = task.path.strip_prefix(&config.root).unwrap_or(&task.path);
+                eprintln!("  ├─ {}", rel_path.display());
+            }
+            if has_subdir {
+                eprintln!("  └─ [subdirectory]");
+            }
 
-                if let Some(ref shebang) = script.shebang {
-                    eval.set_default_agent(&shebang.engine);
-                    if !shebang.model.is_empty() {
-                        eval.set_default_model(&shebang.model);
-                    }
+            if group.files.iter().any(|t| t.on_fail == "stop" && !config.continue_on_error) {
+                warn!("parallel group has tasks with on_fail=stop — failures will stop the entire run");
+            }
+
+            let config_ref: &WalkConfig = &config;
+            let eval_ref: &Evaluator = &*eval;
+            let mut results = Vec::new();
+            std::thread::scope(|s| {
+                let mut handles: Vec<std::thread::ScopedJoinHandle<'_, (bool, Option<&Task>)>> = Vec::new();
+
+                for task in &group.files {
+                    let handle = s.spawn(move || {
+                        let ok = execute_task_isolated(task, config_ref, eval_ref);
+                        (ok, Some(task))
+                    });
+                    handles.push(handle);
                 }
 
-                let result = eval.eval_script(&script);
+                if let Some(ref subdir_groups) = group.subdir {
+                    let handle = s.spawn(move || {
+                        let mut sub_results = Vec::new();
+                        execute_groups_isolated(subdir_groups, config_ref, eval_ref, &mut sub_results);
+                        let all_ok = sub_results.iter().all(|(ok, _)| *ok);
+                        (all_ok, None)
+                    });
+                    handles.push(handle);
+                }
 
-                match result {
-                    Ok(()) => {
-                        eprintln!("[ok]");
-                        passed += 1;
-                    }
-                    Err(EvalError::Exit(ex)) => {
-                        let exit_code = ex.code;
-                        if exit_code == 0 {
-                            eprintln!("[ok]");
-                            passed += 1;
-                        } else {
-                            eprintln!("[fail] exit={}", exit_code);
-                            failed += 1;
-                            if task.on_fail == "stop" && !config.continue_on_error {
-                                eprintln!(
-                                    "stopping after failure ({} passed, {} failed)",
-                                    passed, failed
-                                );
-                                return 1;
-                            }
-                        }
-                    }
-                    Err(EvalError::Msg(e)) => {
-                        eprintln!("[fail] {}", e);
-                        failed += 1;
+                for h in handles {
+                    results.push(h.join().unwrap_or((false, None)));
+                }
+            });
+
+            for (ok, maybe_task) in results {
+                if ok {
+                    passed += 1;
+                } else {
+                    failed += 1;
+                    if let Some(task) = maybe_task {
                         if task.on_fail == "stop" && !config.continue_on_error {
-                            eprintln!(
-                                "stopping after failure ({} passed, {} failed)",
-                                passed, failed
-                            );
+                            eprintln!("stopping after failure ({} passed, {} failed)", passed, failed);
+                            return 1;
+                        }
+                    } else {
+                        // One of the parallel tasks failed
+                        if !config.continue_on_error {
+                            eprintln!("stopping after failure ({} passed, {} failed)", passed, failed);
                             return 1;
                         }
                     }
@@ -511,7 +753,7 @@ pub fn run_tree(config: WalkConfig, eval: &mut Evaluator) -> i32 {
         }
     }
 
-    eprintln!("{} tasks, {} passed, {} failed", total, passed, failed);
+    eprintln!("{} tasks, {} passed, {} failed", total_tasks, passed, failed);
     if failed > 0 {
         1
     } else {
@@ -741,6 +983,24 @@ mod tests {
         assert!(read_task(Path::new("01-empty.md"), "").is_none());
     }
 
+    fn flatten_tasks(groups: &[TaskGroup]) -> Vec<&Task> {
+        let mut result = Vec::new();
+        for g in groups {
+            result.extend(g.files.iter());
+            if let Some(ref sub) = g.subdir {
+                result.extend(flatten_tasks(sub));
+            }
+        }
+        result
+    }
+
+    fn group_sizes(groups: &[TaskGroup]) -> Vec<usize> {
+        groups.iter().map(|g| {
+            let sub_count = g.subdir.as_ref().map(|s| s.len()).unwrap_or(0);
+            g.files.len() + sub_count
+        }).collect()
+    }
+
     #[test]
     fn test_walk_dir_ordering() {
         let d = TestDir::new();
@@ -749,7 +1009,8 @@ mod tests {
         d.file("01-root.md", "# Root");
         fs::write(d.subdir("03-last").join("01-c.md"), "# C").unwrap();
 
-        let tasks = walk_dir(d.path()).unwrap();
+        let groups = walk_dir(d.path()).unwrap();
+        let tasks = flatten_tasks(&groups);
         let names: Vec<&str> = tasks.iter().map(|t| {
             t.path.file_name().unwrap().to_str().unwrap()
         }).collect();
@@ -762,7 +1023,8 @@ mod tests {
         d.file("01-task.md", "# Task");
         d.file("02-other.txt", "not a markdown");
 
-        let tasks = walk_dir(d.path()).unwrap();
+        let groups = walk_dir(d.path()).unwrap();
+        let tasks = flatten_tasks(&groups);
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].path.file_name().unwrap().to_str().unwrap(), "01-task.md");
     }
@@ -774,7 +1036,8 @@ mod tests {
         d.file("readme.md", "# Readme");
         d.file("02-also.md", "# Also");
 
-        let tasks = walk_dir(d.path()).unwrap();
+        let groups = walk_dir(d.path()).unwrap();
+        let tasks = flatten_tasks(&groups);
         assert_eq!(tasks.len(), 2);
         assert_eq!(tasks[0].path.file_name().unwrap().to_str().unwrap(), "01-valid.md");
         assert_eq!(tasks[1].path.file_name().unwrap().to_str().unwrap(), "02-also.md");
@@ -787,7 +1050,8 @@ mod tests {
         let hidden_dir = d.subdir(".hidden");
         fs::write(hidden_dir.join("01-secret.md"), "# Secret").unwrap();
 
-        let tasks = walk_dir(d.path()).unwrap();
+        let groups = walk_dir(d.path()).unwrap();
+        let tasks = flatten_tasks(&groups);
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].path.file_name().unwrap().to_str().unwrap(), "01-task.md");
     }
@@ -798,38 +1062,62 @@ mod tests {
         d.file("01-task.md", "# Task");
         d.file("02-empty.md", "---\n---\n\n  \n");
 
-        let tasks = walk_dir(d.path()).unwrap();
+        let groups = walk_dir(d.path()).unwrap();
+        let tasks = flatten_tasks(&groups);
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].path.file_name().unwrap().to_str().unwrap(), "01-task.md");
     }
 
     #[test]
-    fn test_walk_dir_conflict_detection() {
+    fn test_walk_dir_parallel_group() {
         let d = TestDir::new();
-        d.file("01-foo.md", "# Foo");
-        d.file("01-bar.md", "# Bar");
+        d.file("01-a.md", "# A");
+        d.file("01-b.md", "# B");
+        d.file("02-c.md", "# C");
 
-        let result = walk_dir(d.path());
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err.contains("numbering conflict"));
-        assert!(err.contains("prefix 1"));
-        assert!(err.contains("01-bar.md"));
-        assert!(err.contains("01-foo.md"));
+        let groups = walk_dir(d.path()).unwrap();
+        assert_eq!(group_sizes(&groups), vec![2, 1]);
+        let tasks = flatten_tasks(&groups);
+        assert_eq!(tasks.len(), 3);
+        assert_eq!(tasks[0].path.file_name().unwrap().to_str().unwrap(), "01-a.md");
+        assert_eq!(tasks[1].path.file_name().unwrap().to_str().unwrap(), "01-b.md");
+        assert_eq!(tasks[2].path.file_name().unwrap().to_str().unwrap(), "02-c.md");
     }
 
     #[test]
-    fn test_walk_dir_conflict_file_and_dir() {
+    fn test_walk_dir_parallel_three_tasks() {
+        let d = TestDir::new();
+        d.file("01-a.md", "# A");
+        d.file("01-b.md", "# B");
+        d.file("01-c.md", "# C");
+        d.file("02-d.md", "# D");
+
+        let groups = walk_dir(d.path()).unwrap();
+        assert_eq!(group_sizes(&groups), vec![3, 1]);
+    }
+
+    #[test]
+    fn test_walk_dir_file_and_dir_same_prefix_parallel() {
         let d = TestDir::new();
         d.file("01-foo.md", "# Foo");
-        d.subdir("01-sub");
+        let sub = d.subdir("01-sub");
+        fs::write(sub.join("01-inner.md"), "# Inner").unwrap();
+        d.file("02-bar.md", "# Bar");
 
-        let result = walk_dir(d.path());
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err.contains("numbering conflict"));
-        assert!(err.contains("01-sub/"));
-        assert!(err.contains("01-foo.md"));
+        let groups = walk_dir(d.path()).unwrap();
+        // Group 1: 1 file + subdir (combined parallel group)
+        // Group 2: 1 file (sequential)
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups[0].files.len(), 1);
+        assert!(groups[0].subdir.is_some());
+        assert_eq!(groups[1].files.len(), 1);
+        assert!(groups[1].subdir.is_none());
+
+        let tasks = flatten_tasks(&groups);
+        assert_eq!(tasks.len(), 3);
+        assert_eq!(tasks[0].path.file_name().unwrap().to_str().unwrap(), "01-foo.md");
+        assert_eq!(tasks[1].path.file_name().unwrap().to_str().unwrap(), "01-inner.md");
+        assert_eq!(tasks[2].path.file_name().unwrap().to_str().unwrap(), "02-bar.md");
     }
 
     #[test]
@@ -839,7 +1127,8 @@ mod tests {
         let sub = d.subdir("02-sub");
         fs::write(sub.join("01-inner.md"), "# Inner").unwrap();
 
-        let tasks = walk_dir(d.path()).unwrap();
+        let groups = walk_dir(d.path()).unwrap();
+        let tasks = flatten_tasks(&groups);
         assert_eq!(tasks.len(), 2);
     }
 
@@ -850,7 +1139,8 @@ mod tests {
         d.file("02-build.md", "# Build");
         d.file("03-test.ash", "print X\n");
 
-        let tasks = walk_dir(d.path()).unwrap();
+        let groups = walk_dir(d.path()).unwrap();
+        let tasks = flatten_tasks(&groups);
         assert_eq!(tasks.len(), 3);
         assert_eq!(tasks[0].kind, TaskKind::Ash);
         assert_eq!(tasks[1].kind, TaskKind::Markdown);
@@ -875,7 +1165,8 @@ mod tests {
         d.file("01-task.md", "# Task");
         d.file("readme.ash", "X = 42\n");
 
-        let tasks = walk_dir(d.path()).unwrap();
+        let groups = walk_dir(d.path()).unwrap();
+        let tasks = flatten_tasks(&groups);
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].path.file_name().unwrap().to_str().unwrap(), "01-task.md");
     }
@@ -887,7 +1178,8 @@ mod tests {
         d.file("02-second.md", "# Second");
         d.file("03-third.ash", "#!echo:1.0\n");
 
-        let tasks = walk_dir(d.path()).unwrap();
+        let groups = walk_dir(d.path()).unwrap();
+        let tasks = flatten_tasks(&groups);
         let names: Vec<&str> = tasks
             .iter()
             .map(|t| t.path.file_name().unwrap().to_str().unwrap())
@@ -896,17 +1188,18 @@ mod tests {
     }
 
     #[test]
-    fn test_walk_dir_conflict_md_and_ash_same_prefix() {
+    fn test_walk_dir_parallel_md_and_ash() {
         let d = TestDir::new();
         d.file("01-task.md", "# Task");
         d.file("01-task.ash", "X = 42\n");
+        d.file("02-other.md", "# Other");
 
-        let result = walk_dir(d.path());
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err.contains("numbering conflict"));
-        assert!(err.contains("prefix 1"));
-        assert!(err.contains("01-task.md"));
-        assert!(err.contains("01-task.ash"));
+        let groups = walk_dir(d.path()).unwrap();
+        assert_eq!(group_sizes(&groups), vec![2, 1]);
+        let tasks = flatten_tasks(&groups);
+        assert_eq!(tasks.len(), 3);
+        // Sorted by filename within group: ".ash" < ".md"
+        assert_eq!(tasks[0].kind, TaskKind::Ash);
+        assert_eq!(tasks[1].kind, TaskKind::Markdown);
     }
 }

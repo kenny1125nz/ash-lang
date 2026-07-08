@@ -5,7 +5,7 @@ use ash::engine;
 use ash::eval::{EvalError, Evaluator};
 use ash::lang::ast::{Node, Script};
 use ash::lang::parser::parse_str;
-use ash::runtime::tree::{self, WalkConfig};
+use ash::runtime::tree::{self, ParallelMode, WalkConfig};
 
 use log::info;
 
@@ -303,6 +303,7 @@ fn run() -> i32 {
     let mut check_only = false;
     let mut dry_run = false;
     let mut continue_on_error = false;
+    let mut yes_mode = false;
     let mut agent_spec: Option<String> = None;
     let mut config_override: Option<String> = None;
     let mut positional: Vec<String> = Vec::new();
@@ -313,6 +314,7 @@ fn run() -> i32 {
             "--check" | "-c" => check_only = true,
             "--dry-run" => dry_run = true,
             "--continue-on-error" | "-k" => continue_on_error = true,
+            "--yes" | "-y" => yes_mode = true,
             "--agent" => {
                 if i + 1 < args.len() {
                     i += 1;
@@ -343,6 +345,7 @@ fn run() -> i32 {
                 continue_on_error,
                 default_agent,
                 default_model,
+                parallel: if yes_mode { ParallelMode::Allow } else { ParallelMode::Prompt },
             }, &mut eval);
             ash::telemetry::shutdown();
             return code;

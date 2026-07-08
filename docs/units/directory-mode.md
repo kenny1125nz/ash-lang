@@ -40,7 +40,20 @@ Execution order above: `01-intro.md` → `02-setup/01-db.md` → `02-setup/02-co
 
 Files and directories must start with a numeric prefix (`01-`, `02-step-`, etc.) to be included. Files without a prefix are silently skipped.
 
-Duplicate prefixes at the same level (e.g., `01-foo.md` and `01-bar.md` in the same directory) are reported as an error. Each prefix must be unique within its directory to maintain a deterministic ordering contract.
+Same-prefix files at the same level form a parallel group — all tasks with the same prefix run concurrently:
+
+```
+tasks/
+├── 01-research.md
+├── 02-parse-data.md
+├── 02-analyze-results.md    ← runs in parallel with 02-parse-data.md
+├── 02-summarize.md          ← also part of the parallel group
+└── 03-implement.md          ← waits for all of 02-* to finish
+```
+
+By default, ash prompts for confirmation: *"N parallel group(s) detected. Run them in parallel? [y/N]"*. Pass `--yes` to skip the prompt and always allow. In non-interactive mode (CI, piped stdin), parallel groups produce an error unless `--yes` is given.
+
+A file and a subdirectory with the same prefix form a combined parallel group — the file and the entire subdirectory walk run concurrently on separate threads.
 
 ### Frontmatter (`.md` files)
 
@@ -88,6 +101,7 @@ The shebang's engine and model become the defaults for `do` statements inside th
 | `--dry-run` | Print the task list without executing |
 | `--continue-on-error` / `-k` | Keep running after a task fails |
 | `--check` / `-c` | Validate syntax without executing |
+| `--yes` / `-y` | Allow parallel execution without confirmation prompt |
 | `--agent <name>:<model>` | Default agent and model for all tasks |
 
 ### Skip behavior

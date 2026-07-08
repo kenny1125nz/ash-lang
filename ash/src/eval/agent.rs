@@ -4,7 +4,7 @@ use log::{debug, info};
 use regex::Regex;
 
 use crate::lang::ast::*;
-use crate::runtime::tree::{self, WalkConfig};
+use crate::runtime::tree::{self, ParallelMode, WalkConfig};
 use crate::runtime::value::Value;
 use crate::telemetry;
 
@@ -203,6 +203,7 @@ impl Evaluator {
             continue_on_error: false,
             default_agent: agent_name,
             default_model: model_str,
+            parallel: ParallelMode::Prompt,
         };
 
         let exit_code = tree::run_tree(config, self);

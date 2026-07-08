@@ -87,7 +87,7 @@ pub struct Evaluator {
     pub session_depth: usize,
     pub within_stack: Vec<PathBuf>,
     pub telemetry_ctx: Option<telemetry::context::SpanContext>,
-    script_args: Vec<String>,
+    pub(crate) script_args: Vec<String>,
 }
 
 impl Evaluator {
