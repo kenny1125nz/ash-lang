@@ -1,0 +1,80 @@
+---
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { marked } from 'marked';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const boardDir = path.resolve(__dirname, '../../../../workflows/board');
+const visionPath = path.join(boardDir, 'vision.md');
+const missionPath = path.join(boardDir, 'mision.md');
+
+const visionRaw = fs.readFileSync(visionPath, 'utf-8');
+const missionRaw = fs.readFileSync(missionPath, 'utf-8');
+
+const visionLines = visionRaw.trim().split('\n');
+const visionTitle = visionLines[0].replace(/^#\s*/, '');
+const visionBody = visionLines.slice(1).join('\n').trim();
+
+const sections = missionRaw.split(/\n(?=## )/);
+const pillars = sections.slice(1).map(section => {
+  const lines = section.trim().split('\n');
+  const heading = lines[0].replace(/^##\s*/, '').replace(/^\d+\.\s*/, '');
+  const bodyMd = lines.slice(1).join('\n').trim();
+
+  const subtitleMatch = bodyMd.match(/^\*\*(.+?)\*\*/);
+  const subtitle = subtitleMatch ? subtitleMatch[1] : '';
+
+  const whyMatch = bodyMd.match(/\*\*Why It Matters:\*\*\s*(.+?)(?=\*\*What We're Building:\*\*|$)/s);
+  const why = whyMatch ? whyMatch[1].trim() : '';
+
+  const whatMatch = bodyMd.match(/\*\*What We're Building:\*\*\s*(.+?)$/s);
+  const what = whatMatch ? whatMatch[1].trim() : '';
+
+  const preambleEnd = bodyMd.indexOf('**Why It Matters:**');
+  const body = preambleEnd > 0 ? bodyMd.substring(0, preambleEnd).trim() : bodyMd.trim();
+
+  return { title: heading, subtitle, body, why, what };
+});
+
+const pillarsHtml = pillars.map(p => ({
+  ...p,
+  bodyHtml: marked.parse(p.body),
+  whyHtml: marked.parse(p.why),
+  whatHtml: marked.parse(p.what),
+}));
+---
+
+<BaseLayout title="Vision & Mission">
+  <div class="max-w-4xl mx-auto py-16 md:py-24">
+    <h1 class="text-3xl md:text-4xl font-bold mb-16 animate-on-scroll">Vision &amp; Mission</h1>
+
+    <section class="mb-20 text-center animate-on-scroll">
+      <blockquote class="border-l-4 border-accent-green pl-0 py-8">
+        <h2 class="text-4xl md:text-5xl font-bold text-accent-green mb-6">{visionTitle}</h2>
+        <p class="text-xl md:text-2xl text-text-secondary leading-relaxed max-w-3xl mx-auto">{visionBody}</p>
+      </blockquote>
+    </section>
+
+    <section>
+      <div class="space-y-16">
+        {pillarsHtml.map((pillar, i) => (
+          <div class={`bg-bg-secondary border border-border rounded-lg p-8 animate-on-scroll${i > 0 ? ` animate-delay-${i}` : ''}`}>
+            <h2 class="text-2xl font-bold mb-2">{pillar.title}</h2>
+            <p class="text-accent-green font-semibold mb-4">{pillar.subtitle}</p>
+            <div class="text-text-secondary leading-relaxed mb-6 [&_p]:mb-4 [&_p:last-child]:mb-0" set:html={pillar.bodyHtml} />
+            <div class="mb-6">
+              <h3 class="font-semibold text-text-primary mb-2">Why It Matters:</h3>
+              <div class="text-text-secondary leading-relaxed [&_p]:mb-2" set:html={pillar.whyHtml} />
+            </div>
+            <div>
+              <h3 class="font-semibold text-text-primary mb-2">What We're Building:</h3>
+              <div class="text-text-secondary leading-relaxed" set:html={pillar.whatHtml} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  </div>
+</BaseLayout>

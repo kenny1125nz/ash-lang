@@ -1,0 +1,159 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Supported Agents">
+  <section class="py-16 md:py-24 max-w-6xl mx-auto">
+    <div class="mb-10">
+      <h1 class="text-3xl md:text-4xl font-bold mb-4">Supported <span class="text-accent-green">Agents</span></h1>
+      <p class="text-text-secondary leading-relaxed">Ash has built-in support for these AI coding agents. Each agent can be configured via <code class="text-accent-green text-sm font-mono">ash.yml</code> with the default settings below.</p>
+    </div>
+
+    <h2 class="text-2xl font-bold mb-4">Default Configurations</h2>
+    <p class="text-text-secondary mb-8 leading-relaxed">Run <code class="text-accent-green text-sm font-mono">ash discover</code> to auto-detect installed agents, or configure them manually in <code class="text-accent-green text-sm font-mono">ash.yml</code>.</p>
+
+    <div class="overflow-x-auto">
+      <table class="w-full border-collapse text-sm">
+        <thead>
+          <tr class="bg-bg-secondary">
+            <th class="border border-border px-4 py-3 text-left font-semibold text-text-primary">Agent</th>
+            <th class="border border-border px-4 py-3 text-left font-semibold text-text-primary">Binary</th>
+            <th class="border border-border px-4 py-3 text-left font-semibold text-text-primary">Args</th>
+            <th class="border border-border px-4 py-3 text-left font-semibold text-text-primary">Model Flag</th>
+            <th class="border border-border px-4 py-3 text-left font-semibold text-text-primary">Session Flag</th>
+            <th class="border border-border px-4 py-3 text-left font-semibold text-text-primary">Message Flag</th>
+            <th class="border border-border px-4 py-3 text-left font-semibold text-text-primary">Yes Flag</th>
+            <th class="border border-border px-4 py-3 text-left font-semibold text-text-primary">Install</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="bg-bg-primary">
+            <td class="border border-border px-4 py-3 font-medium text-accent-blue">opencode</td>
+            <td class="border border-border px-4 py-3 text-text-primary">opencode</td>
+            <td class="border border-border px-4 py-3 text-text-primary">run</td>
+            <td class="border border-border px-4 py-3 text-text-primary">--model</td>
+            <td class="border border-border px-4 py-3 text-text-primary">--continue</td>
+            <td class="border border-border px-4 py-3 text-text-secondary"></td>
+            <td class="border border-border px-4 py-3 text-text-secondary"></td>
+            <td class="border border-border px-4 py-3 text-text-primary font-mono text-xs">npm i -g @anomalyco/opencode</td>
+          </tr>
+          <tr class="bg-bg-secondary">
+            <td class="border border-border px-4 py-3 font-medium text-accent-blue">claude-code</td>
+            <td class="border border-border px-4 py-3 text-text-primary">claude</td>
+            <td class="border border-border px-4 py-3 text-text-secondary"></td>
+            <td class="border border-border px-4 py-3 text-text-primary">--model</td>
+            <td class="border border-border px-4 py-3 text-text-primary">--continue</td>
+            <td class="border border-border px-4 py-3 text-text-primary">--msg</td>
+            <td class="border border-border px-4 py-3 text-text-secondary"></td>
+            <td class="border border-border px-4 py-3 text-text-primary font-mono text-xs">npm i -g @anthropic-ai/claude-code</td>
+          </tr>
+          <tr class="bg-bg-primary">
+            <td class="border border-border px-4 py-3 font-medium text-accent-blue">aider</td>
+            <td class="border border-border px-4 py-3 text-text-primary">aider</td>
+            <td class="border border-border px-4 py-3 text-text-secondary"></td>
+            <td class="border border-border px-4 py-3 text-text-primary">--model</td>
+            <td class="border border-border px-4 py-3 text-text-primary">--restore-chat-history</td>
+            <td class="border border-border px-4 py-3 text-text-primary">--msg</td>
+            <td class="border border-border px-4 py-3 text-text-primary">--yes</td>
+            <td class="border border-border px-4 py-3 text-text-primary font-mono text-xs">pip install aider-chat</td>
+          </tr>
+          <tr class="bg-bg-secondary">
+            <td class="border border-border px-4 py-3 font-medium text-accent-blue">codex</td>
+            <td class="border border-border px-4 py-3 text-text-primary">codex</td>
+            <td class="border border-border px-4 py-3 text-text-primary">run</td>
+            <td class="border border-border px-4 py-3 text-text-primary">--model</td>
+            <td class="border border-border px-4 py-3 text-text-secondary"></td>
+            <td class="border border-border px-4 py-3 text-text-secondary"></td>
+            <td class="border border-border px-4 py-3 text-text-primary">--yolo</td>
+            <td class="border border-border px-4 py-3 text-text-primary font-mono text-xs">npm i -g @openai/codex</td>
+          </tr>
+          <tr class="bg-bg-primary">
+            <td class="border border-border px-4 py-3 font-medium text-accent-blue">gemini-cli</td>
+            <td class="border border-border px-4 py-3 text-text-primary">gemini</td>
+            <td class="border border-border px-4 py-3 text-text-primary">-p</td>
+            <td class="border border-border px-4 py-3 text-text-primary">--model</td>
+            <td class="border border-border px-4 py-3 text-text-primary">--continue</td>
+            <td class="border border-border px-4 py-3 text-text-secondary"></td>
+            <td class="border border-border px-4 py-3 text-text-secondary"></td>
+            <td class="border border-border px-4 py-3 text-text-primary font-mono text-xs">npm i -g @google/gemini-cli</td>
+          </tr>
+          <tr class="bg-bg-secondary">
+            <td class="border border-border px-4 py-3 font-medium text-accent-blue">kimi</td>
+            <td class="border border-border px-4 py-3 text-text-primary">kimi</td>
+            <td class="border border-border px-4 py-3 text-text-secondary"></td>
+            <td class="border border-border px-4 py-3 text-text-primary">--model</td>
+            <td class="border border-border px-4 py-3 text-text-primary">--continue</td>
+            <td class="border border-border px-4 py-3 text-text-primary">-p</td>
+            <td class="border border-border px-4 py-3 text-text-primary">--yolo</td>
+            <td class="border border-border px-4 py-3 text-text-primary font-mono text-xs">curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash</td>
+          </tr>
+          <tr class="bg-bg-primary">
+            <td class="border border-border px-4 py-3 font-medium text-accent-blue">pi</td>
+            <td class="border border-border px-4 py-3 text-text-primary">pi</td>
+            <td class="border border-border px-4 py-3 text-text-secondary"></td>
+            <td class="border border-border px-4 py-3 text-text-primary">--model</td>
+            <td class="border border-border px-4 py-3 text-text-secondary"></td>
+            <td class="border border-border px-4 py-3 text-text-primary">-p</td>
+            <td class="border border-border px-4 py-3 text-text-secondary"></td>
+            <td class="border border-border px-4 py-3 text-text-primary font-mono text-xs">npm i -g @picoglobal/pi</td>
+          </tr>
+          <tr class="bg-bg-secondary">
+            <td class="border border-border px-4 py-3 font-medium text-accent-blue">goose</td>
+            <td class="border border-border px-4 py-3 text-text-primary">goose</td>
+            <td class="border border-border px-4 py-3 text-text-primary">run</td>
+            <td class="border border-border px-4 py-3 text-text-primary">--model</td>
+            <td class="border border-border px-4 py-3 text-text-secondary"></td>
+            <td class="border border-border px-4 py-3 text-text-secondary"></td>
+            <td class="border border-border px-4 py-3 text-text-primary">-y</td>
+            <td class="border border-border px-4 py-3 text-text-primary font-mono text-xs">brew install goose</td>
+          </tr>
+          <tr class="bg-bg-primary">
+            <td class="border border-border px-4 py-3 font-medium text-accent-blue">qwen-code</td>
+            <td class="border border-border px-4 py-3 text-text-primary">qwen</td>
+            <td class="border border-border px-4 py-3 text-text-primary">run</td>
+            <td class="border border-border px-4 py-3 text-text-primary">--model</td>
+            <td class="border border-border px-4 py-3 text-text-secondary"></td>
+            <td class="border border-border px-4 py-3 text-text-secondary"></td>
+            <td class="border border-border px-4 py-3 text-text-secondary"></td>
+            <td class="border border-border px-4 py-3 text-text-primary font-mono text-xs">pip install qwen-code</td>
+          </tr>
+          <tr class="bg-bg-secondary">
+            <td class="border border-border px-4 py-3 font-medium text-accent-blue">amazon-q</td>
+            <td class="border border-border px-4 py-3 text-text-primary">q</td>
+            <td class="border border-border px-4 py-3 text-text-secondary"></td>
+            <td class="border border-border px-4 py-3 text-text-primary">--model</td>
+            <td class="border border-border px-4 py-3 text-text-secondary"></td>
+            <td class="border border-border px-4 py-3 text-text-primary">-p</td>
+            <td class="border border-border px-4 py-3 text-text-secondary"></td>
+            <td class="border border-border px-4 py-3 text-text-primary font-mono text-xs">npm i -g @aws/q</td>
+          </tr>
+          <tr class="bg-bg-primary">
+            <td class="border border-border px-4 py-3 font-medium text-accent-blue">echo</td>
+            <td class="border border-border px-4 py-3 text-text-primary">echo</td>
+            <td class="border border-border px-4 py-3 text-text-secondary"></td>
+            <td class="border border-border px-4 py-3 text-text-secondary"></td>
+            <td class="border border-border px-4 py-3 text-text-secondary"></td>
+            <td class="border border-border px-4 py-3 text-text-secondary"></td>
+            <td class="border border-border px-4 py-3 text-text-secondary"></td>
+            <td class="border border-border px-4 py-3 text-text-primary font-mono text-xs">Built-in (always available)</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 class="text-2xl font-bold mt-16 mb-4">Custom Agents</h2>
+    <p class="text-text-secondary mb-8 leading-relaxed">Any CLI-based agent can be configured manually via <code class="text-accent-green text-sm font-mono">ash.yml</code>. Here is an example:</p>
+    <pre class="bg-bg-tertiary rounded-lg p-4 overflow-x-auto font-mono text-sm mb-8"><code>agents:
+  my-tool:
+    type: local-cli
+    cmd: my-tool
+    args: ["run"]
+    model_flag: "--model"
+    session_flag: "--continue"
+    message_flag: "--msg"
+    stdin_prompt: false
+    yes_flag: "--yes"</code></pre>
+
+    <p class="text-text-secondary text-sm">See the <a href="/reference" class="text-accent-green hover:underline">full language reference</a> for detailed documentation, or visit the <a href="https://github.com/kenny1125nz/ash-lang" class="text-accent-green hover:underline">GitHub repository</a>.</p>
+  </section>
+</BaseLayout>

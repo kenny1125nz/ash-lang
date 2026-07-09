@@ -220,7 +220,7 @@
 | Data and Instrumentation (11.1–11.5) | Unanimous | 5 | 0 | 0 |
 | Standing Authorities (12.1–12.5) | Unanimous | 5 | 0 | 0 |
 
-**Directors in Attendance:** Marcus Thorne (Executive Director, Co-Founder & CEO), Priya Nair (Investor Director, Framework Capital), Sarah Chen (Director, Open-Source / Community), James Okonkwo (Independent Director, DevTools Go-To-Market), Dr. Elena Vasquez (Independent Director, Enterprise Architecture).
+**Directors in Attendance:** Marcus Thorne (Executive Director, Co-Founder & CEO), Priya Nair (Investor Director, Orchestra Ventures), Sarah Chen (Director, Open-Source / Community), James Okonkwo (Independent Director, DevTools Go-To-Market), Dr. Elena Vasquez (Independent Director, Enterprise Architecture).
 
 **Certified by:** _________________________________ (Chair)
 

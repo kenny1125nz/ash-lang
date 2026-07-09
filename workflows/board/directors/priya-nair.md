@@ -1,10 +1,10 @@
 # Priya Nair — Board Director Profile
 
-**Role:** Investor Director — Partner at Framework Capital
+**Role:** Investor Director — Partner at Orchestra Ventures
 
 ## Background
 
-Priya is a Partner at Framework Capital, a $400M early-stage fund focused on developer infrastructure and AI tooling. She led their Series A investment in Ash and holds the designated investor board seat. Before Framework, she was an operator — founding and selling a CI/CD monitoring startup to Datadog, then spending two years as a Director of Product integrating the acquisition. She has been on both sides of the table and invests in founders, not pitch decks.
+Priya is a Partner at Orchestra Ventures, a $400M early-stage fund focused on developer infrastructure and AI tooling. She led their Series A investment in Ash and holds the designated investor board seat. Before Orchestra Ventures, she was an operator — founding and selling a CI/CD monitoring startup to MetricHound, then spending two years as a Director of Product integrating the acquisition. She has been on both sides of the table and invests in founders, not pitch decks.
 
 ## Why Ash
 
@@ -12,14 +12,14 @@ Priya's thesis: the next $10B company in AI won't be a model provider — it wil
 
 ## Relevant Experience
 
-- Partner, Framework Capital (2022–present)
-- Director of Product, Datadog (2019–2022)
-- Founder & CEO, CirrusCI (acquired by Datadog, 2017)
+- Partner, Orchestra Ventures (2022–present)
+- Director of Product, MetricHound (2019–2022)
+- Founder & CEO, StratusCI (acquired by MetricHound, 2017)
 - Co-author of the DevOps Maturity Model framework
 
 ## Board Positions
 
-**On monetization:** Insists on unit-economics-first thinking. The pricing model must survive LTV/CAC math at $320K burn. Favors per-seat enterprise pricing with a free individual tier — the Atlassian model, not the Vercel model. Pushes Marcus to price against value captured, not cost incurred. Will block any pricing that needs 10,000 paying users to reach break-even — the market isn't there yet.
+**On monetization:** Insists on unit-economics-first thinking. The pricing model must survive LTV/CAC math at $320K burn. Favors per-seat enterprise pricing with a free individual tier — the TeamForge model, not the VeloCloud model. Pushes Marcus to price against value captured, not cost incurred. Will block any pricing that needs 10,000 paying users to reach break-even — the market isn't there yet.
 
 **On licensing:** Believes the license conversation is a trap — a symptom of product insecurity, not a solution. MIT is fine IF adoption velocity is high enough. The real question: is Ash growing fast enough that license doesn't matter? If not, fix the product and GTM, not the legal text. Will push back on any BSL discussion as premature for a company with 8K stars.
 

@@ -33,6 +33,7 @@ jobs:
               "${{ github.workspace }}/npm-package/README.md" \
               "${{ github.workspace }}/ash-vscode/README.md" \
               "${{ github.workspace }}/web-site/reference.html" \
+              "${{ github.workspace }}/web-site/src/content/reference-content.html" \
               "${{ github.workspace }}/docs/website-reference.md"
           git diff --cached --quiet || git commit -m "sync generated docs [skip ci]"
 
@@ -127,23 +128,54 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
       - name: Build WASM
         run: |
           cd ash-wasm
           wasm-pack build --target web --release
-          mkdir -p ../web-site/wasm
-          echo "pkg contents:" && ls -la pkg/
-          for f in pkg/*.wasm; do cp "$f" ../web-site/wasm/"$(basename "$f")"; done
-          for f in pkg/*.js; do cp "$f" ../web-site/wasm/"$(basename "$f")"; done
+          mkdir -p ../web-site/public/wasm
+          cp pkg/*.wasm ../web-site/public/wasm/
+          cp pkg/*.js ../web-site/public/wasm/
+
+      - name: Generate docs
+        run: |
+          npm install --prefix docs
+          node docs/assemble.js
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Apply D1 migrations
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npm install -g wrangler
+          wrangler d1 migrations apply ash-website-db --config web-site/wrangler.toml
+
+      - name: Install and test
+        working-directory: web-site
+        run: |
+          npm ci
+          npm test
+
+      - name: Build Astro
+        working-directory: web-site
+        run: npm run build
+
       - name: Deploy to Cloudflare Pages
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           npm install -g wrangler
-          wrangler pages deploy web-site --project-name=green-band-aooriwu --branch main
+          wrangler pages deploy web-site/dist --project-name=green-band-aooriwu --branch main

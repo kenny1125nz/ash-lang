@@ -4,7 +4,7 @@
 
 ## Background
 
-Dr. Elena Vasquez spent nine years as CTO at Deutsche Bank's Global Technology division, where she led the architecture review board that governed every software deployment across 26 countries. She built the bank's internal platform engineering division from zero to 400 engineers, introduced containerization in a mainframe culture, and chaired the AI governance committee that defined the bank's policy for LLM adoption in regulated workflows. Before Deutsche Bank, she was VP of Engineering at a FedRAMP-authorized cloud provider, where she learned to design systems that satisfy both auditors and engineers.
+Dr. Elena Vasquez spent nine years as CTO at EuropaBank's Global Technology division, where she led the architecture review board that governed every software deployment across 26 countries. She built the bank's internal platform engineering division from zero to 400 engineers, introduced containerization in a mainframe culture, and chaired the AI governance committee that defined the bank's policy for LLM adoption in regulated workflows. Before EuropaBank, she was VP of Engineering at a GovCloud Certified-authorized cloud provider, where she learned to design systems that satisfy both auditors and engineers.
 
 ## Why Ash
 
@@ -12,11 +12,11 @@ Elena has lived the tension between innovation and compliance. She knows that en
 
 ## Relevant Experience
 
-- CTO, Global Technology, Deutsche Bank (2015–2024)
-- Chair, AI Governance Committee, Deutsche Bank (2020–2024)
-- VP of Engineering, FedRAMP Cloud Provider (2011–2015)
-- PhD in Distributed Systems, ETH Zurich
-- Board member, Cloud Security Alliance (2019–present)
+- CTO, Global Technology, EuropaBank (2015–2024)
+- Chair, AI Governance Committee, EuropaBank (2020–2024)
+- VP of Engineering, GovCloud Certified Cloud Provider (2011–2015)
+- PhD in Distributed Systems, Zurich Institute of Technology
+- Board member, Cloud Governance Alliance (2019–present)
 
 ## Board Positions
 

@@ -1,0 +1,35 @@
+---
+import { marked } from 'marked';
+
+export interface Props {
+  name: string;
+  role: string;
+  background: string;
+  perspective: string;
+  initials: string;
+  color: string;
+}
+
+const { name, role, background, perspective, initials, color } = Astro.props;
+
+const perspectiveClean = perspective.replace(/^>\s*/gm, '').trim();
+const perspectiveHtml = marked.parse(perspectiveClean);
+
+const bgHtml = marked.parse(background);
+const shortBio = background.replace(/^>\s*/gm, '').trim().split('\n\n')[0];
+---
+
+<div class="bg-bg-secondary border border-border rounded-lg p-6 flex flex-col md:flex-row gap-6">
+  <div class="shrink-0">
+    <div
+      class="w-20 h-20 md:w-24 md:h-24 rounded-full flex items-center justify-center text-3xl font-bold shrink-0"
+      style={`background:${color}20;color:${color}`}
+    >{initials}</div>
+  </div>
+  <div class="flex-1 min-w-0">
+    <h3 class="text-xl font-bold">{name}</h3>
+    <p class="text-accent-green text-sm font-medium mb-3">{role}</p>
+    <div class="text-text-secondary text-sm leading-relaxed [&_p]:mb-2 [&_p:last-child]:mb-0" set:html={bgHtml} />
+    <blockquote class="border-l-3 border-accent-green pl-4 italic text-text-secondary text-sm mt-4" set:html={perspectiveHtml} />
+  </div>
+</div>

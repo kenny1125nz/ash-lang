@@ -1,0 +1,39 @@
+---
+export const prerender = false;
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { marked } from 'marked';
+
+const { slug } = Astro.params;
+
+let post;
+try {
+  const db = Astro.locals.runtime.env.DB;
+  post = await db.prepare('SELECT * FROM posts WHERE slug = ?').bind(slug).first();
+} catch (e) {
+  console.error('Failed to load post:', e);
+  return new Response('Unable to load posts. Please try again later.', { status: 500 });
+}
+
+if (!post) {
+  return new Response(null, { status: 404 });
+}
+
+if (!post.title || !post.slug || !post.author || !post.published_at || !post.content) {
+  console.warn(`Malformed post record for slug: ${slug}`);
+  return new Response('Unable to load posts. Please try again later.', { status: 500 });
+}
+
+const html = marked.parse(post.content);
+const formattedDate = new Date(post.published_at).toLocaleDateString('en-US', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+});
+---
+<BaseLayout title={post.title}>
+  <article class="py-16 md:py-24 max-w-3xl mx-auto">
+    <h1 class="text-3xl md:text-4xl font-bold mb-4">{post.title}</h1>
+    <p class="text-text-secondary text-sm mb-8">By {post.author} · <time datetime={post.published_at}>{formattedDate}</time></p>
+    <div class="prose" set:html={html} />
+  </article>
+</BaseLayout>

@@ -1,0 +1,125 @@
+<form id="feedback-form" class="space-y-6">
+  <div id="general-error" class="text-accent-red text-sm hidden"></div>
+
+  <div>
+    <label for="name" class="block text-sm font-medium mb-1">Name</label>
+    <input type="text" id="name" name="name" required
+      class="w-full text-base bg-bg-secondary border border-border rounded-lg px-4 py-3 text-text-primary focus:ring-2 focus:ring-accent-green focus:border-accent-green focus:outline-none" />
+    <span id="name-error" class="text-accent-red text-sm hidden"></span>
+  </div>
+
+  <div>
+    <label for="email" class="block text-sm font-medium mb-1">Email</label>
+    <input type="email" id="email" name="email" required
+      class="w-full text-base bg-bg-secondary border border-border rounded-lg px-4 py-3 text-text-primary focus:ring-2 focus:ring-accent-green focus:border-accent-green focus:outline-none" />
+    <span id="email-error" class="text-accent-red text-sm hidden"></span>
+  </div>
+
+  <div>
+    <label for="category" class="block text-sm font-medium mb-1">Category</label>
+    <select id="category" name="category" required
+      class="w-full text-base bg-bg-secondary border border-border rounded-lg px-4 py-3 text-text-primary focus:ring-2 focus:ring-accent-green focus:border-accent-green focus:outline-none">
+      <option value="">Select a category</option>
+      <option value="General">General</option>
+      <option value="Bug Report">Bug Report</option>
+      <option value="Feature Request">Feature Request</option>
+      <option value="Other">Other</option>
+    </select>
+    <span id="category-error" class="text-accent-red text-sm hidden"></span>
+  </div>
+
+  <div>
+    <label for="message" class="block text-sm font-medium mb-1">Message</label>
+    <textarea id="message" name="message" required rows="5"
+      class="w-full text-base bg-bg-secondary border border-border rounded-lg px-4 py-3 text-text-primary focus:ring-2 focus:ring-accent-green focus:border-accent-green focus:outline-none"></textarea>
+    <span id="message-error" class="text-accent-red text-sm hidden"></span>
+  </div>
+
+  <button type="submit"
+    class="w-full md:w-auto bg-accent-green text-white font-medium px-8 py-3 rounded-lg hover:opacity-90 transition-opacity">
+    Submit Feedback
+  </button>
+</form>
+
+<div id="success-message" class="hidden bg-accent-green/10 border border-accent-green rounded-lg p-6 text-center">
+  <p class="text-accent-green font-semibold text-lg">Thank you for your feedback.</p>
+</div>
+
+<script>
+  const form = document.getElementById('feedback-form');
+  const successMessage = document.getElementById('success-message');
+  const generalError = document.getElementById('general-error');
+
+  function showError(fieldId, message) {
+    const span = document.getElementById(fieldId + '-error');
+    span.textContent = message;
+    span.classList.remove('hidden');
+  }
+
+  function clearErrors() {
+    document.querySelectorAll('[id$="-error"]').forEach(el => {
+      el.classList.add('hidden');
+      el.textContent = '';
+    });
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    clearErrors();
+    generalError.classList.add('hidden');
+
+    const name = document.getElementById('name').value.trim();
+    const email = document.getElementById('email').value.trim();
+    const category = document.getElementById('category').value;
+    const message = document.getElementById('message').value.trim();
+
+    let valid = true;
+
+    if (!name) {
+      showError('name', 'Name is required.');
+      valid = false;
+    }
+
+    if (!email) {
+      showError('email', 'Email is required.');
+      valid = false;
+    } else if (!email.includes('@')) {
+      showError('email', 'Email must contain @.');
+      valid = false;
+    }
+
+    if (!category) {
+      showError('category', 'Please select a category.');
+      valid = false;
+    }
+
+    if (!message) {
+      showError('message', 'Message is required.');
+      valid = false;
+    }
+
+    if (!valid) return;
+
+    try {
+      const response = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, message, category }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.ok) {
+        form.reset();
+        form.classList.add('hidden');
+        successMessage.classList.remove('hidden');
+      } else {
+        generalError.textContent = data.error || 'Something went wrong.';
+        generalError.classList.remove('hidden');
+      }
+    } catch {
+      generalError.textContent = 'Something went wrong.';
+      generalError.classList.remove('hidden');
+    }
+  });
+</script>

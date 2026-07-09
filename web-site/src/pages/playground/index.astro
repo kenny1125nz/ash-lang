@@ -1,0 +1,97 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+const exampleCode = `#!js-echo:0.1.0
+
+print "=== Ash Playground ==="
+
+TASKS = ["Check login", "Test search", "Review footer"]
+for TASK in TASKS {
+  do "Navigate and \${TASK}"
+  print "Task: \${TASK}"
+  print "Result: \${stdout}"
+}
+
+print "Completed \${len(TASKS)} tasks"`;
+---
+
+<BaseLayout title="Playground">
+  <section class="py-8 md:py-12">
+    <div class="max-w-7xl mx-auto">
+      <h1 class="text-2xl md:text-3xl font-bold mb-2">Playground</h1>
+      <p class="text-text-secondary text-sm md:text-base mb-6">
+        Write and run Ash scripts in your browser, or use the REPL for interactive experimentation.
+        The built-in <code class="text-accent-green">js-echo</code> agent echoes your prompt back.
+      </p>
+
+      <div class="flex gap-0 border-b-2 border-border mb-0">
+        <button id="script-tab" class="tab-btn active" onclick="switchTab('script')" style="padding:8px 20px;background:none;border:none;color:#4d8cf5;cursor:pointer;font-size:14px;font-family:inherit;border-bottom:2px solid #4d8cf5;margin-bottom:-2px">Script</button>
+        <button id="repl-tab" class="tab-btn" onclick="switchTab('repl')" style="padding:8px 20px;background:none;border:none;color:#68707a;cursor:pointer;font-size:14px;font-family:inherit;border-bottom:2px solid transparent;margin-bottom:-2px">REPL</button>
+      </div>
+
+      <div id="script-panel">
+        <div class="flex flex-col md:flex-row gap-4 mt-4">
+          <div class="flex-1 min-w-0">
+            <div class="border border-border rounded-lg overflow-hidden bg-bg-secondary">
+              <div class="flex items-center justify-between px-4 py-2 border-b border-border bg-bg-tertiary">
+                <span class="text-xs font-semibold text-text-secondary uppercase tracking-wider">Script</span>
+                <span class="flex gap-2">
+                  <button class="text-xs px-2 py-1 rounded border border-border text-text-secondary hover:text-text-primary hover:border-text-secondary transition-colors bg-transparent cursor-pointer font-sans" onclick="loadExample()">Load Example</button>
+                  <button class="text-xs px-2 py-1 rounded border border-border text-text-secondary hover:text-text-primary hover:border-text-secondary transition-colors bg-transparent cursor-pointer font-sans" onclick="clearEditor()">Clear</button>
+                </span>
+              </div>
+              <div class="editor-wrap" style="position:relative;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.5;padding:16px;height:400px;overflow:hidden">
+                <div id="editor-highlight" class="editor-highlight" aria-hidden="true" style="position:absolute;top:0;left:0;width:100%;height:100%;padding:16px;margin:0;white-space:pre-wrap;word-wrap:break-word;overflow:hidden;pointer-events:none;font-family:inherit;font-size:inherit;line-height:inherit;color:transparent;background:transparent;border:none"></div>
+                <textarea id="editor" spellcheck="false" style="position:relative;background:transparent;color:transparent;caret-color:#1a1d23;z-index:1;width:100%;height:100%;min-height:288px;border:none;outline:none;resize:none;padding:0;font-family:inherit;font-size:inherit;line-height:inherit;overflow:auto">{exampleCode}</textarea>
+              </div>
+            </div>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="border border-border rounded-lg overflow-hidden bg-bg-secondary">
+              <div class="flex items-center justify-between px-4 py-2 border-b border-border bg-bg-tertiary">
+                <span class="text-xs font-semibold text-text-secondary uppercase tracking-wider">Output</span>
+                <span class="flex gap-2 items-center">
+                  <span class="text-xs text-text-secondary">Status: <span id="status">ready</span></span>
+                  <button class="text-xs px-2 py-1 rounded border border-border text-text-secondary hover:text-text-primary hover:border-text-secondary transition-colors bg-transparent cursor-pointer font-sans" onclick="clearOutput()">Clear</button>
+                </span>
+              </div>
+              <div class="output" id="output" style="padding:16px;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.5;height:400px;overflow-y:auto;color:#1a1d23;white-space:pre-wrap">Click "Run" to execute the script.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-4 mt-4 px-1">
+          <button class="px-6 py-2 rounded-lg bg-accent-green text-bg-primary font-semibold text-sm hover:brightness-110 transition-all cursor-pointer font-sans border-none" onclick="runScript()">Run</button>
+          <span class="flex-1"></span>
+          <span class="text-xs text-text-secondary">
+            <span id="wasm-status" style="color:#c4890e">loading WASM...</span>
+          </span>
+        </div>
+      </div>
+
+      <div id="repl-panel" style="display:none;margin-top:16px">
+        <div class="border border-border rounded-lg overflow-hidden bg-bg-secondary w-full">
+          <div class="flex items-center justify-between px-4 py-2 border-b border-border bg-bg-tertiary">
+            <span class="text-xs font-semibold text-text-secondary uppercase tracking-wider">REPL</span>
+            <span class="flex gap-2">
+              <button class="text-xs px-2 py-1 rounded border border-border text-text-secondary hover:text-text-primary hover:border-text-secondary transition-colors bg-transparent cursor-pointer font-sans" onclick="clearRepl()">Clear</button>
+            </span>
+          </div>
+          <div style="height:400px;overflow-y:auto;padding:16px;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.6;color:#1a1d23" id="repl-output">
+            <span style="color:#68707a">Ash REPL. Type .help for commands.</span><br><br>
+          </div>
+          <div style="display:flex;align-items:center;padding:8px 16px;border-top:1px solid #dde1e6;background:#f0f2f5">
+            <span id="repl-prompt" style="color:#10a08a;font-weight:600;font-family:'JetBrains Mono',monospace;margin-right:4px">> </span>
+            <input id="repl-input" autocomplete="off" spellcheck="false" style="flex:1;background:transparent;border:none;color:#1a1d23;font-family:'JetBrains Mono',monospace;font-size:13px;outline:none;padding:4px 0" placeholder="Type an expression and press Enter...">
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div id="toast" class="toast"></div>
+
+  <pre style="display:none"><code class="example-code" set:html={exampleCode} /></pre>
+
+  <script is:inline src="/js/playground.js"></script>
+</BaseLayout>

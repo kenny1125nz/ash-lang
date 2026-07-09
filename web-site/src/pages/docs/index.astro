@@ -1,0 +1,170 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+const varsShellCode = `MSG = "hello"
+ITEMS = ["a", "b", "c"]
+FIRST = ITEMS[0]
+print "count: \${len(ITEMS)}"
+working_dir = $(pwd)`;
+
+const agentCallsCode = `do "Review this code" with opencode
+
+try {
+  do "Fix the bug" with fixer
+} fail {
+  do "Retry: \${stderr}"
+} upto 3`;
+
+const controlFlowCode = `for FILE in FILES {
+  do "Review \${FILE}"
+  if $? != 0 { exit 1 }
+}
+
+exec npm test
+if $? == 0 {
+  print "all good"
+}`;
+
+const functionsCode = `fn review(path) {
+  do "Review \${path}" with opencode
+}
+
+include "helpers.ash"
+review("src/main.rs")`;
+
+const shebangCode = `#!opencode:1.0
+
+do "Review src/" with opencode`;
+
+const yamlCode = `---
+agent: opencode
+model: sonnet
+---
+
+# Task Title
+
+The prompt content goes here...`;
+
+const treeCode = `tasks/
+├── 01-research.md
+├── 02-implement.md
+├── 03-review.ash
+└── 04-deploy.md`;
+---
+
+<BaseLayout title="Documentation">
+  <!-- Getting Started -->
+  <section id="getting-started" class="py-16 md:py-24 max-w-4xl mx-auto">
+    <h2 class="text-2xl md:text-3xl font-bold mb-8">Getting Started</h2>
+
+    <h3 class="text-lg font-semibold mb-3">Installation</h3>
+    <pre class="bg-bg-tertiary rounded-lg p-4 overflow-x-auto font-mono text-sm mb-4"><code>npm install -g ash-lang</code></pre>
+    <p class="text-text-secondary text-sm leading-relaxed mb-8">Verify it's installed:</p>
+    <pre class="bg-bg-tertiary rounded-lg p-4 overflow-x-auto font-mono text-sm mb-8"><code>ash discover</code></pre>
+
+    <p class="text-text-secondary mb-8 leading-relaxed">
+      <strong>Built-in support:</strong> opencode, claude-code, aider, codex, gemini-cli, kimi, and more. See <a href="/agents" class="text-accent-green hover:underline">supported agents</a> for the full list and default configs.
+    </p>
+
+    <p class="text-text-secondary mb-4 leading-relaxed">Use <code class="text-accent-green text-sm font-mono">--agent</code> to specify which agent to run with:</p>
+    <pre class="bg-bg-tertiary rounded-lg p-4 overflow-x-auto font-mono text-sm mb-8"><code>ash --agent opencode ./tasks</code></pre>
+
+    <p class="text-text-secondary text-sm leading-relaxed mb-8">The <code class="text-accent-green text-sm font-mono">tasks/</code> folder contains numbered <code class="text-accent-green text-sm font-mono">.md</code> files — each file is one task sent to the agent, executed in sorted order. Drop in an <code class="text-accent-green text-sm font-mono">.ash</code> file when you need loops, retries, or conditionals. See <a href="/docs#how-it-works" class="text-accent-green hover:underline">How Ash Works</a> for the expected folder layout.</p>
+
+    <p class="text-text-secondary mb-4 leading-relaxed">If you add a new agent after ash was already installed, run:</p>
+    <pre class="bg-bg-tertiary rounded-lg p-4 overflow-x-auto font-mono text-sm mb-8"><code>ash discover</code></pre>
+
+    <p class="text-text-secondary mb-4 leading-relaxed">Any CLI-based agent can be configured manually via <code class="text-accent-green text-sm font-mono">ash.yml</code>:</p>
+    <pre class="bg-bg-tertiary rounded-lg p-4 overflow-x-auto font-mono text-sm"><code>agents:
+  my-tool:
+    type: local-cli
+    cmd: my-tool
+    message_flag: "--prompt"
+    yes_flag: "--yes"</code></pre>
+  </section>
+
+  <!-- How Ash Works -->
+  <section id="how-it-works" class="py-16 md:py-24 border-t border-border max-w-4xl mx-auto">
+    <h2 class="text-2xl md:text-3xl font-bold mb-4">How Ash Works</h2>
+    <p class="text-text-secondary mb-10 leading-relaxed">Drop markdown files in a folder, number them, and run. Each file is a task sent to an AI agent. Output flows between steps.</p>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="bg-bg-secondary border border-border rounded-lg p-6">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-lg font-semibold">tasks/</h3>
+          <span class="text-xs text-accent-green font-medium">Step 1: Create a folder of tasks</span>
+        </div>
+        <pre class="bg-bg-tertiary rounded-lg p-4 overflow-x-auto font-mono text-sm"><code set:html={treeCode} /></pre>
+      </div>
+
+      <div class="bg-bg-secondary border border-border rounded-lg p-6">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-lg font-semibold">Terminal</h3>
+          <span class="text-xs text-accent-green font-medium">Step 2: Run — agents execute each task in order</span>
+        </div>
+        <div class="terminal" id="terminal">
+          <div class="terminal-line" style="animation-delay:0.2s"><span class="tp">$</span> ash --agent opencode tasks/</div>
+          <div class="terminal-line" style="animation-delay:0.8s"><span class="tp">[1/4]</span> 01-research.md → <span class="ag">opencode</span> <span class="model">sonnet-4</span></div>
+          <div class="terminal-line" style="animation-delay:1.4s"><span class="tp">[2/4]</span> 02-implement.md → <span class="ag">claude-code</span> <span class="model">claude-sonnet-4</span></div>
+          <div class="terminal-line" style="animation-delay:2.0s"><span class="tp">[3/4]</span> 03-review.ash <span class="ash-ext">(shebang: codex)</span></div>
+          <div class="terminal-line" style="animation-delay:2.6s"><span class="tp">[4/4]</span> 04-deploy.md → <span class="ag">opencode</span> <span class="model">haiku-flash</span></div>
+          <div class="terminal-line" style="animation-delay:3.2s;color:#10a08a">4 tasks, 4 passed</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Syntax Reference -->
+  <section class="py-16 md:py-24 border-t border-border max-w-4xl mx-auto">
+    <h2 class="text-2xl md:text-3xl font-bold mb-4">When You Need Full Orchestration</h2>
+    <p class="text-text-secondary mb-10 leading-relaxed">Markdown tasks handle simple agent calls. Drop in an <code class="text-accent-green text-sm font-mono">.ash</code> file when a single prompt isn't enough — variables, conditionals, shell commands within one step. Standalone scripts give you the full language: loops, retry, parallelism, functions. Same runtime, same state passing. Just add power as you need it.</p>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+      <div class="bg-bg-secondary border border-border rounded-lg p-6">
+        <h3 class="text-lg font-semibold mb-3">Variables, Strings & Shell</h3>
+        <pre class="bg-bg-tertiary rounded-lg p-4 overflow-x-auto font-mono text-sm"><code set:html={varsShellCode} /></pre>
+      </div>
+
+      <div class="bg-bg-secondary border border-border rounded-lg p-6">
+        <h3 class="text-lg font-semibold mb-3">Agent Calls</h3>
+        <pre class="bg-bg-tertiary rounded-lg p-4 overflow-x-auto font-mono text-sm"><code set:html={agentCallsCode} /></pre>
+      </div>
+
+      <div class="bg-bg-secondary border border-border rounded-lg p-6">
+        <h3 class="text-lg font-semibold mb-3">Control Flow</h3>
+        <pre class="bg-bg-tertiary rounded-lg p-4 overflow-x-auto font-mono text-sm"><code set:html={controlFlowCode} /></pre>
+      </div>
+
+      <div class="bg-bg-secondary border border-border rounded-lg p-6">
+        <h3 class="text-lg font-semibold mb-3">Functions & Composition</h3>
+        <pre class="bg-bg-tertiary rounded-lg p-4 overflow-x-auto font-mono text-sm"><code set:html={functionsCode} /></pre>
+      </div>
+    </div>
+
+    <p class="text-text-secondary text-sm mb-4">For <code class="text-accent-green text-sm font-mono">.ash</code> scripts, declare the agent with a shebang:</p>
+    <pre class="bg-bg-tertiary rounded-lg p-4 overflow-x-auto font-mono text-sm mb-8"><code set:html={shebangCode} /></pre>
+
+    <p class="text-text-secondary text-sm mb-4">For <code class="text-accent-green text-sm font-mono">.md</code> tasks, optionally set the agent in YAML frontmatter:</p>
+    <pre class="bg-bg-tertiary rounded-lg p-4 overflow-x-auto font-mono text-sm"><code set:html={yamlCode} /></pre>
+  </section>
+</BaseLayout>
+
+<script>
+  (function() {
+    var terminal = document.querySelector('.terminal');
+    if (terminal && 'IntersectionObserver' in window) {
+      var observer = new IntersectionObserver(function(entries) {
+        entries.forEach(function(entry) {
+          if (entry.isIntersecting) {
+            terminal.classList.remove('visible');
+            void terminal.offsetWidth;
+            terminal.classList.add('visible');
+          }
+        });
+      }, { threshold: 0.3 });
+      observer.observe(terminal);
+    } else if (terminal) {
+      terminal.classList.add('visible');
+    }
+  })();
+</script>

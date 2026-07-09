@@ -136,7 +136,11 @@ function braceDepth(line) {
 function switchTab(mode) {
   if (mode === 'repl') {
     scriptTabEl.classList.remove('active');
+    scriptTabEl.style.color = '#68707a';
+    scriptTabEl.style.borderBottomColor = 'transparent';
     replTabEl.classList.add('active');
+    replTabEl.style.color = '#4d8cf5';
+    replTabEl.style.borderBottomColor = '#4d8cf5';
     scriptPanelEl.style.display = 'none';
     replPanelEl.style.display = 'flex';
     replInputEl.focus();
@@ -145,7 +149,11 @@ function switchTab(mode) {
     }
   } else {
     replTabEl.classList.remove('active');
+    replTabEl.style.color = '#68707a';
+    replTabEl.style.borderBottomColor = 'transparent';
     scriptTabEl.classList.add('active');
+    scriptTabEl.style.color = '#4d8cf5';
+    scriptTabEl.style.borderBottomColor = '#4d8cf5';
     replPanelEl.style.display = 'none';
     scriptPanelEl.style.display = '';
     editorEl.focus();
@@ -280,7 +288,7 @@ function setupWorkerHandlers() {
 // --- WASM init ---
 async function initWasm() {
   try {
-    evalWorker = new Worker('js/eval-worker.js', { type: 'module' });
+    evalWorker = new Worker('/js/eval-worker.js', { type: 'module' });
     setupWorkerHandlers();
     wasmStatusEl.textContent = 'loading WASM...';
     wasmStatusEl.style.color = 'var(--accent3)';
@@ -311,6 +319,10 @@ window.clearEditor = function () {
 window.clearOutput = function () {
   outputEl.textContent = 'Click "Run" to execute the script.';
   statusEl.textContent = 'ready';
+};
+
+window.clearRepl = function () {
+  replOutputEl.innerHTML = '<span style="color:#68707a">Ash REPL. Type .help for commands.</span><br><br>';
 };
 
 // --- Editor sync ---

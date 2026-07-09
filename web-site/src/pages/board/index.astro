@@ -1,0 +1,78 @@
+---
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { marked } from 'marked';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import DirectorCard from '../../components/DirectorCard.astro';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const directorsDir = path.resolve(__dirname, '../../../../workflows/board/directors');
+
+interface DirectorMeta {
+  file: string;
+  initials: string;
+  color: string;
+}
+
+const directorMeta: DirectorMeta[] = [
+  { file: 'marcus-thorne.md', initials: 'MT', color: '#10a08a' },
+  { file: 'priya-nair.md', initials: 'PN', color: '#4d8cf5' },
+  { file: 'sarah-chen.md', initials: 'SC', color: '#c4890e' },
+  { file: 'james-okonkwo.md', initials: 'JO', color: '#e0554a' },
+  { file: 'elena-vasquez.md', initials: 'EV', color: '#8b5cf6' },
+];
+
+function extractSection(text: string, heading: string): string {
+  const regex = new RegExp(`## ${heading}\\s*\\n([\\s\\S]*?)(?=\\n## |$)`);
+  const match = text.match(regex);
+  return match ? match[1].trim() : '';
+}
+
+const directors = directorMeta.map(({ file, initials, color }) => {
+  const raw = fs.readFileSync(path.join(directorsDir, file), 'utf-8');
+  const lines = raw.split('\n');
+
+  const headingLine = lines[0].replace(/^#\s*/, '');
+  const name = headingLine.replace(/ — Board Director Profile$/, '');
+
+  const roleLine = lines.find(l => l.startsWith('**Role:**'));
+  const role = roleLine ? roleLine.replace(/^\*\*Role:\*\*\s*/, '') : '';
+
+  const background = extractSection(raw, 'Background');
+  const perspectiveSection = extractSection(raw, 'Perspective');
+  const perspective = perspectiveSection.replace(/^>\s*/gm, '').trim();
+
+  return { name, role, background, perspective, initials, color };
+});
+---
+
+<BaseLayout title="Board of Directors">
+  <div class="max-w-4xl mx-auto py-16 md:py-24">
+    <div class="bg-accent-yellow/10 border border-accent-yellow/30 rounded-lg p-4 mb-10">
+      <p class="text-sm text-text-secondary leading-relaxed">
+        <strong class="text-accent-yellow">Disclaimer:</strong> The directors below are <strong>virtual personas</strong> — part of an experimental AI-driven governance model. Their profiles, backgrounds, and perspectives are generated artifacts. See the <a href="/disclaimer" class="text-accent-green hover:underline">full disclaimer</a>.
+      </p>
+    </div>
+
+    <h1 class="text-3xl md:text-4xl font-bold mb-4 animate-on-scroll">Board of Directors</h1>
+    <p class="text-text-secondary mb-12 leading-relaxed animate-on-scroll animate-delay-1">
+      Our board brings together expertise in developer tools, open-source communities, enterprise architecture, and venture capital to guide Ash's strategy and governance.
+    </p>
+
+    <div class="space-y-6">
+      {directors.map((director, i) => (
+        <div class={`animate-on-scroll${i > 0 ? ` animate-delay-${Math.min(i, 4)}` : ''}`}>
+        <DirectorCard
+          name={director.name}
+          role={director.role}
+          background={director.background}
+          perspective={director.perspective}
+          initials={director.initials}
+          color={director.color}
+        />
+        </div>
+      ))}
+    </div>
+  </div>
+</BaseLayout>

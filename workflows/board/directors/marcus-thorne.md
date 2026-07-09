@@ -4,18 +4,18 @@
 
 ## Background
 
-Marcus spent twelve years as a platform engineer and engineering lead at Shopify, where he built internal orchestration systems that coordinated hundreds of microservices across CI/CD pipelines. He saw firsthand that the biggest bottleneck wasn't tooling — it was the gap between automated processes and the human decisions embedded inside them. He left Shopify in 2024 to start Ash, frustrated that no existing tool treated AI agents as first-class steps in a governed workflow.
+Marcus spent twelve years as a platform engineer and engineering lead at MerchantOS, where he built internal orchestration systems that coordinated hundreds of microservices across CI/CD pipelines. He saw firsthand that the biggest bottleneck wasn't tooling — it was the gap between automated processes and the human decisions embedded inside them. He left MerchantOS in 2024 to start Ash, frustrated that no existing tool treated AI agents as first-class steps in a governed workflow.
 
 ## Why Ash
 
-Marcus is the origin. He wrote the first `.ash` parser in a weekend after watching three teams at Shopify run incompatible shell scripts to orchestrate the same set of coding agents. His conviction: AI agents need a build system, not a chat interface. He brings the technical vision, the product intuition, and the scar tissue from scaling infrastructure that handles millions of executions.
+Marcus is the origin. He wrote the first `.ash` parser in a weekend after watching three teams at MerchantOS run incompatible shell scripts to orchestrate the same set of coding agents. His conviction: AI agents need a build system, not a chat interface. He brings the technical vision, the product intuition, and the scar tissue from scaling infrastructure that handles millions of executions.
 
 ## Relevant Experience
 
-- Staff Platform Engineer, Shopify (2018–2024)
-- Engineering Lead, Internal Orchestration Platform, Shopify (2021–2024)
-- Platform Engineer, GitHub (2015–2018)
-- Contributor to the Terraform and Nix ecosystems
+- Staff Platform Engineer, MerchantOS (2018–2024)
+- Engineering Lead, Internal Orchestration Platform, MerchantOS (2021–2024)
+- Platform Engineer, CodeHub (2015–2018)
+- Contributor to the TerrainForge and Nix ecosystems
 
 ## Board Positions
 

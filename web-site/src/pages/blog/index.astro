@@ -1,0 +1,41 @@
+---
+export const prerender = false;
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import BlogCard from '../../components/BlogCard.astro';
+
+let results;
+try {
+  const db = Astro.locals.runtime.env.DB;
+  const query = await db.prepare('SELECT title, slug, author, published_at FROM posts ORDER BY published_at DESC').all();
+  results = query.results;
+} catch (e) {
+  console.error('Failed to load posts:', e);
+  return new Response('Unable to load posts. Please try again later.', { status: 500 });
+}
+
+const rows: { title?: string; slug?: string; author?: string; published_at?: string }[] = results ?? [];
+const validPosts = rows.filter((row) => row.title && row.slug && row.author && row.published_at);
+const skipped = rows.length - validPosts.length;
+if (skipped > 0) {
+  console.warn(`Skipped ${skipped} malformed post(s) in listing.`);
+}
+---
+<BaseLayout title="Blog">
+  <div class="py-16 md:py-24 max-w-3xl mx-auto">
+    <h1 class="text-3xl md:text-4xl font-bold mb-8">Blog</h1>
+    {validPosts.length === 0 ? (
+      <p class="text-center text-text-secondary">No posts yet.</p>
+    ) : (
+      <div class="space-y-4">
+        {validPosts.map((post) => (
+          <BlogCard
+            title={post.title!}
+            slug={post.slug!}
+            author={post.author!}
+            published_at={post.published_at!}
+          />
+        ))}
+      </div>
+    )}
+  </div>
+</BaseLayout>

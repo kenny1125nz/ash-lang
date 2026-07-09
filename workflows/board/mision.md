@@ -1,31 +1,31 @@
 # Mission
 
-## 1. Own the Standard
+## 1. An Open Standard for AI Workflows
 
-**The Strategic Moat**
+**The Foundation**
 
-Establish our format as the universal system of record for AI orchestration.
+Ash provides a text-native format for expressing AI orchestration — human-readable, version-controllable, and tool-agnostic. Your workflow logic lives in files you can review, share, and audit like any other software artifact.
 
-**The Board's Perspective:** A product can be replaced; a standard is entrenched. By making our text-native format (the `.ash` script) the canonical way organizations store their workflow IP, we create massive switching costs. If a company's critical business logic is written in our standard, we own the ecosystem.
+**Why It Matters:** AI is powerful but unpredictable. By encoding workflows as plain text — not buried in chat threads or locked into proprietary formats — teams gain repeatability, traceability, and the ability to collaborate. One workflow, many models, zero lock-in.
 
-**Strategic Action:** We must prioritize open adoption, seamless version-control integration, and frictionless readability. The goal is for our language to become the default contract between human operators and AI agents across the industry.
+**What We're Building:** A format that becomes the default way organizations describe how AI agents should work together. Open source, open format, open governance.
 
-## 2. Commoditize the Supplier
+## 2. Model-Agnostic by Design
 
-**The Resilience Play**
+**The Architecture**
 
-Decouple enterprise value from underlying AI models by owning the orchestration layer.
+Ash decouples your workflows from any single AI provider. The execution engine can swap underlying models or agents through configuration alone — your `.ash` scripts and `.md` tasks never need to change.
 
-**The Board's Perspective:** The biggest existential risk to our business — and our clients' businesses — is vendor lock-in with LLM providers (OpenAI, Anthropic, Google). If we just build a wrapper, we are at their mercy.
+**Why It Matters:** The AI landscape shifts every quarter. Models improve, prices drop, new capabilities emerge. Locking into one provider means betting your infrastructure on their roadmap. Ash makes models interchangeable commodities, so your workflow investment outlasts any single model generation.
 
-**Strategic Action:** We must build a platform-agnostic architecture. By ensuring our execution engine can hot-swap any underlying model or agent via configuration, we reduce LLMs to interchangeable commodities. The long-term value and intelligence accrue to our platform, not the LLM providers.
+**What We're Building:** A platform-agnostic runtime where you configure the agent once and run everywhere. Use OpenCode today, Claude Code tomorrow, whatever ships next year — same workflows, zero rewrites.
 
-## 3. Eliminate Enterprise Liability
+## 3. Enterprise-Ready Governance
 
-**The Risk Mandate**
+**The Safety Layer**
 
-Transform unpredictable, stochastic AI behavior into auditable, deterministic business processes.
+AI agents acting autonomously in production requires controls that enterprises trust. Ash provides deterministic execution, full audit trails, state capture at every step, and the guardrails that let compliance teams say yes.
 
-**The Board's Perspective:** Enterprises have capital, but they cannot deploy it into systems that pose a compliance, security, or operational liability. "Black box" AI is a massive liability.
+**Why It Matters:** Every enterprise wants to deploy AI but none can afford a black box. Ash turns AI operations into auditable business processes — every decision traced, every output captured, every execution reproducible. This isn't about making AI smarter; it's about making it safe enough to use at scale.
 
-**Strategic Action:** Our engineering and product focus must be strictly on governance, state control, and deterministic evaluation loops. We are not selling "smarter AI"; we are selling the safety, audit trails, and strict guardrails that allow a Chief Risk Officer to legally and safely sign off on AI deployment at scale.
+**What We're Building:** Governance features including SOC 2 compliance, EU AI Act audit trail support, role-based access controls, and deterministic evaluation loops — the infrastructure that lets risk officers, not just developers, trust AI in production.

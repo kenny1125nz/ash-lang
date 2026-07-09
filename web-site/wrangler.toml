@@ -1,0 +1,8 @@
+name = "green-band-aooriwu"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ash-website-db"
+database_id = "5f1aeb93-78d1-4e86-9694-79d1df9dafbc"

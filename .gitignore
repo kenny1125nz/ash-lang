@@ -7,3 +7,5 @@ ash-wasm/pkg/
 *.vsix
 .VSCodeCounter/
 tmp/
+**/dist/*
+

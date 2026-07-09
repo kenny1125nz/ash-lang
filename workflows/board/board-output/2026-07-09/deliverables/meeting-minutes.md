@@ -13,7 +13,7 @@
 The following directors were present throughout the meeting, constituting a quorum of the Board:
 
 - **Marcus Thorne** — Executive Director, Co-Founder & Chief Executive Officer
-- **Priya Nair** — Investor Director, Partner at Framework Capital
+- **Priya Nair** — Investor Director, Partner at Orchestra Ventures
 - **Sarah Chen** — Director, Open-Source & Community
 - **James Okonkwo** — Independent Director, DevTools Go-To-Market
 - **Dr. Elena Vasquez** — Independent Director, Enterprise Architecture
@@ -46,7 +46,7 @@ Marcus Thorne presented the CEO business update covering the following matters:
 
 The company reported 5,200 monthly active workflows (up from 1,400 in the prior quarter, representing 22% month-over-month growth), across 1,500 unique organizations (up from 600), with average workflows per organization rising from 2.3 to 3.5. Weekly active users stood at 340 (up from 180), with monthly churn declining from 18% to 12%. Net Promoter Score moved from 28 to 32. Day-30 retention improved from 16% to 22%.
 
-GitHub stars doubled to 8,200. Unique contributors doubled to 94, with repeat contributors more than doubling from 6 to 14.
+CodeHub stars doubled to 8,200. Unique contributors doubled to 94, with repeat contributors more than doubling from 6 to 14.
 
 Ash Cloud was live with 340 free users and 4 paying customers, producing $400 in monthly recurring revenue. Error rate was 3.2% of executions. Uptime was 99.7%, with one 45-minute outage during an auth migration recorded as the sole incident.
 
@@ -66,7 +66,7 @@ The CEO reported: Ash Cloud shipped six weeks late due to auth integration issue
 
 **4.5 Market Developments**
 
-The CEO noted: the emergence of TaskWeaver (a YC W26, 3-person competitor launching with a `.md`-based task runner, 1,200 GitHub stars in two weeks); GitHub Copilot's agent workflow mode in private beta; MCP adoption across 15 agent tools; and four YC-batch companies entering the AI workflow/agent orchestration category.
+The CEO noted: the emergence of TaskWeaver (a YC W26, 3-person competitor launching with a `.md`-based task runner, 1,200 CodeHub stars in two weeks); CodeHub Copilot's agent workflow mode in private beta; MCP adoption across 15 agent tools; and four YC-batch companies entering the AI workflow/agent orchestration category.
 
 **4.6 CEO's Asks of the Board**
 
@@ -132,7 +132,7 @@ The board conducted a comprehensive review of the company's licensing position. 
 
 **6.1 Points of Agreement**
 
-All five directors agreed that: (a) the MIT license shall remain, permanently and irrevocably; (b) a license change at the current stage would be catastrophic — the combined cost of legal fees, community trust erosion, enterprise pipeline destruction, and GTM engine damage having been independently priced by four directors as exceeding the company's current financial capacity; (c) the licensing question was a category error — TaskWeaver did not fork Ash's code but copied the `.md` format, which was already MIT-licensed, and the company's engineering strategy had already designated the markdown engine (not the DSL execution engine) as the product; (d) the real competitive moat is not a legal clause but a combination of community ownership, enterprise governance features, adoption depth, format entrenchment, and execution velocity; (e) TaskWeaver's existence constitutes market validation, not a licensing threat; and (f) the HashiCorp BSL relicense serves as the cautionary precedent — a company with over $500 million in annual revenue suffered permanent community damage from a license change, which Ash at $400 MRR could not survive.
+All five directors agreed that: (a) the MIT license shall remain, permanently and irrevocably; (b) a license change at the current stage would be catastrophic — the combined cost of legal fees, community trust erosion, enterprise pipeline destruction, and GTM engine damage having been independently priced by four directors as exceeding the company's current financial capacity; (c) the licensing question was a category error — TaskWeaver did not fork Ash's code but copied the `.md` format, which was already MIT-licensed, and the company's engineering strategy had already designated the markdown engine (not the DSL execution engine) as the product; (d) the real competitive moat is not a legal clause but a combination of community ownership, enterprise governance features, adoption depth, format entrenchment, and execution velocity; (e) TaskWeaver's existence constitutes market validation, not a licensing threat; and (f) the InfraCore BSL relicense serves as the cautionary precedent — a company with over $500 million in annual revenue suffered permanent community damage from a license change, which Ash at $400 MRR could not survive.
 
 **6.2 Conditions Precedent to the Moat Holding Under MIT**
 

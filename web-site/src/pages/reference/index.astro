@@ -1,0 +1,142 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import fragment from '../../content/reference-content.html?raw';
+---
+
+<BaseLayout title="Feature Reference">
+  <div class="container mx-auto px-4 py-12">
+    <Fragment set:html={fragment} />
+  </div>
+</BaseLayout>
+
+<style is:global>
+  .ref-hero {
+    padding: 64px 0 40px;
+    text-align: center;
+    background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
+    border-bottom: 1px solid #dde1e6;
+    margin: -48px -1rem 0;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  @media (min-width: 768px) {
+    .ref-hero {
+      margin-left: -1.5rem;
+      margin-right: -1.5rem;
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+    }
+  }
+  @media (min-width: 1024px) {
+    .ref-hero {
+      margin-left: -2rem;
+      margin-right: -2rem;
+      padding-left: 2rem;
+      padding-right: 2rem;
+    }
+  }
+  .ref-hero h1 {
+    font-size: 40px;
+    font-weight: 800;
+    margin-bottom: 8px;
+    color: #1a1d23;
+  }
+  .ref-hero p {
+    font-size: 16px;
+    color: #68707a;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+  .ref-content {
+    padding: 40px 0 64px;
+  }
+  .ref-content h2 {
+    font-size: 26px;
+    font-weight: 700;
+    margin: 36px 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #dde1e6;
+    color: #1a1d23;
+  }
+  .ref-content h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 28px 0 10px;
+    color: #c4890e;
+  }
+  .ref-content h4 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 20px 0 8px;
+    color: #68707a;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+  }
+  .ref-content p {
+    font-size: 15px;
+    line-height: 1.7;
+    margin: 12px 0;
+    color: #68707a;
+  }
+  .ref-content ul,
+  .ref-content ol {
+    margin: 8px 0 16px;
+    padding-left: 24px;
+    font-size: 15px;
+    color: #68707a;
+  }
+  .ref-content li {
+    margin: 4px 0;
+  }
+  .ref-content li > p {
+    margin: 4px 0;
+  }
+  .ref-content strong {
+    color: #1a1d23;
+  }
+  .ref-content code {
+    background: #f0f2f5;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: .85em;
+    color: #1a1d23;
+  }
+  .ref-content pre {
+    margin: 16px 0;
+  }
+  .ref-content pre code {
+    background: none;
+    padding: 0;
+    font-size: 13px;
+  }
+  .ref-content a {
+    color: #10a08a;
+  }
+  .ref-content a:hover {
+    text-decoration: underline;
+  }
+  .ref-content table {
+    margin: 16px 0;
+    color: #68707a;
+  }
+  .ref-content blockquote {
+    border-left: 3px solid #10a08a;
+    padding: 12px 20px;
+    margin: 16px 0;
+    background: #ffffff;
+    border-radius: 6px;
+    color: #68707a;
+  }
+  .ref-content blockquote p {
+    margin: 4px 0;
+  }
+  .ref-content hr {
+    border: none;
+    border-top: 1px solid #dde1e6;
+    margin: 32px 0;
+  }
+  .ref-content img {
+    max-width: 100%;
+    border-radius: 6px;
+  }
+</style>

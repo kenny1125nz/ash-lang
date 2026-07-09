@@ -27,7 +27,7 @@ Building an orchestration language is very different from selling one. You want 
 
 ### The Open-Source / Community Veteran
 
-If you plan to make parts of the project open-source, an executive who has built and monetized developer communities (think HashiCorp, Vercel, or Docker) will be invaluable for navigating licensing, community relations, and paid tier structures.
+If you plan to make parts of the project open-source, an executive who has built and monetized developer communities (think InfraCore, VeloCloud, or Capsule) will be invaluable for navigating licensing, community relations, and paid tier structures.
 
 ### The Enterprise Architecture Leader
 

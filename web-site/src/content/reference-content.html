@@ -1,0 +1,816 @@
+<div class="ref-hero">
+  <h1>Ash — Feature Reference</h1>
+<p>Complete feature reference for Ash agent shell scripts.</p>
+
+</div>
+<div class="ref-content">
+  <h2>What is Ash?</h2>
+<p>Ash is a task runner for AI agents — deterministic, repeatable, no scripting required. Point Ash at a directory of markdown files and it walks the tree in sorted order, sending each file to your configured AI agent. One task per file.</p>
+<pre><code>tasks/
+├── 1-plan/
+│   ├── 01-requirements.md
+│   └── 02-architecture.md
+├── 2-implement/
+│   ├── 01-auth.md
+│   ├── 02-api.md
+│   └── 03-tests.md
+└── 3-review/
+    └── 01-code-review.md
+
+→ ash tasks/
+</code></pre>
+<p>When you need more than one-shot prompts — chaining, conditionals, parallelism — write an <code>.ash</code> script. Start simple. Grow as needed.</p>
+<h2>Installation</h2>
+<h3>npm</h3>
+<pre><code class="language-bash">npm install -g @ash-lang/cli
+</code></pre>
+<p>On <code>npm install</code>, the correct platform binary is downloaded from GitHub Releases automatically.</p>
+<h3>Prebuilt binaries</h3>
+<p>Download from <a href="https://github.com/kenny1125nz/ash-lang/releases">GitHub Releases</a>.</p>
+<p>Place the binary alongside <code>ash.js</code> in the npm package directory if the automatic download fails.</p>
+<h3>Requirements</h3>
+<ul>
+<li>Rust 1.70+ (for building from source)</li>
+<li>Node.js (for npm install)</li>
+</ul>
+<h2>Quick Start</h2>
+<h3>Configure your agent</h3>
+<p>Create <code>ash.yml</code> in your project root:</p>
+<pre><code class="language-yaml">default_agent: opencode
+</code></pre>
+<p>Or set it per-run:</p>
+<pre><code class="language-bash">ash --agent opencode tasks/
+</code></pre>
+<h3>Run your first project</h3>
+<pre><code>my-project/
+├── ash.yml
+└── tasks/
+    ├── 1-init/
+    │   └── 01-setup.md
+    └── 2-feature/
+        └── 01-add-login.md
+</code></pre>
+<pre><code class="language-bash">ash my-project/tasks/
+</code></pre>
+<p>Ash prints each task and its result as the agent completes it. Tasks that return a non-zero exit code are marked as failures.</p>
+<h3>Skip failures, keep going</h3>
+<pre><code class="language-bash">ash --continue-on-error tasks/
+</code></pre>
+<h3>Validate without running</h3>
+<pre><code class="language-bash">ash --check tasks/
+</code></pre>
+<h3>See what would run</h3>
+<pre><code class="language-bash">ash --dry-run tasks/
+</code></pre>
+<h2>Writing Tasks</h2>
+<p>Each <code>.md</code> file is a standalone prompt sent to the agent. Optional YAML frontmatter sets per-task config (agent, model, etc.). The filename sets the order — Ash sorts alphanumerically. Subdirectories group related tasks.</p>
+<p><strong>tasks/1-plan/01-requirements.md:</strong></p>
+<pre><code class="language-markdown">---
+agent: opencode
+---
+
+Write a requirements document for a login system that supports:
+
+- Email/password authentication
+- OAuth with Google and GitHub
+- Session management with JWT
+- Rate limiting on failed attempts
+</code></pre>
+<p><strong>tasks/2-implement/01-auth.md:</strong></p>
+<pre><code class="language-markdown">---
+agent: claude-code
+---
+
+Implement the login API endpoint. Cover:
+
+- POST /auth/login — validates email/password, returns JWT
+- POST /auth/register — creates user, sends verification email
+- POST /auth/refresh — refreshes expired tokens
+
+Use the requirements from tasks/1-plan/01-requirements.md.
+</code></pre>
+<h3>Frontmatter reference</h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Values</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>agent</code></td>
+<td>agent name</td>
+<td>—</td>
+<td>Override agent for this task</td>
+</tr>
+<tr>
+<td><code>model</code></td>
+<td>model name</td>
+<td>—</td>
+<td>Override model for this task</td>
+</tr>
+<tr>
+<td><code>on_fail</code></td>
+<td><code>stop</code>, <code>continue</code></td>
+<td><code>stop</code></td>
+<td>Behavior when the task fails</td>
+</tr>
+<tr>
+<td><code>compact</code></td>
+<td>directive</td>
+<td>—</td>
+<td>Context window strategy for this task</td>
+</tr>
+</tbody></table>
+<h2>Scripting with .ash Files</h2>
+<p>When you need more than one-shot prompts — chaining, conditionals, parallelism — write an <code>.ash</code> script:</p>
+<pre><code class="language-ash">#!opencode
+do &quot;Write a hello world program in Rust&quot;
+print stdout
+</code></pre>
+<pre><code class="language-bash">ash hello.ash
+</code></pre>
+<h3>Agent shebang</h3>
+<p>Declare the agent with a shebang:</p>
+<pre><code class="language-ash">#!opencode:1.0
+
+do &quot;Review src/&quot; with opencode
+</code></pre>
+<h3>Default agent</h3>
+<p>Set the default agent for all subsequent <code>do</code> calls with <code>use</code>:</p>
+<pre><code class="language-ash">use opencode
+do &quot;Review src/&quot;                # uses opencode
+
+use claude-code
+do &quot;Refactor the implementation&quot; # uses claude-code
+</code></pre>
+<p>The agent can still be overridden per-call with <code>do &quot;...&quot; with &lt;agent&gt;</code>.</p>
+<h3>Language overview</h3>
+<pre><code class="language-ash">use opencode                             # set default agent
+
+do &quot;Review src/&quot;                         # call an agent
+
+fn rollback(FILE) {                      # functions
+  exec git restore &quot;${FILE}&quot;
+  do &quot;Summarize what has been done&quot;
+}
+
+for FILE in FILES {                      # loops, conditionals, retry
+  try {
+    do &quot;Fix bugs in ${FILE}&quot;
+  } fail {
+    print &quot;failed on ${FILE}&quot;
+  } upto 3
+}
+</code></pre>
+<h2>Directory Mode</h2>
+<p>Pass a directory to walk its task tree in numeric-prefix order:</p>
+<pre><code class="language-bash">ash ./tasks
+ash ./tasks --dry-run
+ash ./tasks --continue-on-error
+</code></pre>
+<h3>Task tree layout</h3>
+<pre><code>tasks/
+├── 01-intro.md
+├── 02-setup/
+│   ├── 01-db.md
+│   ├── 02-config.ash
+│   └── 03-seed-data.md
+├── 03-build.ash
+└── 04-review.md
+</code></pre>
+<p>Files get a numeric prefix (<code>01-</code>, <code>02-</code>, etc.). Subdirectories group related tasks — the walker recurses into them in order.</p>
+<p>Execution order above: <code>01-intro.md</code> → <code>02-setup/01-db.md</code> → <code>02-setup/02-config.ash</code> → <code>02-setup/03-seed-data.md</code> → <code>03-build.ash</code> → <code>04-review.md</code></p>
+<h3>File types</h3>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Extension</th>
+<th>How it&#39;s handled</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Markdown</td>
+<td><code>.md</code></td>
+<td>Content is sent as a prompt to the configured agent. <code>${VAR}</code> interpolation is resolved from the evaluator scope.</td>
+</tr>
+<tr>
+<td>Ash script</td>
+<td><code>.ash</code></td>
+<td>Parsed and executed as an ash script. Has full access to variables, functions, control flow — including <code>do</code> statements.</td>
+</tr>
+</tbody></table>
+<h3>Numeric prefix</h3>
+<p>Files and directories must start with a numeric prefix (<code>01-</code>, <code>02-step-</code>, etc.) to be included. Files without a prefix are silently skipped.</p>
+<p>Same-prefix files at the same level form a parallel group — all tasks with the same prefix run concurrently:</p>
+<pre><code>tasks/
+├── 01-research.md
+├── 02-parse-data.md
+├── 02-analyze-results.md    ← runs in parallel with 02-parse-data.md
+├── 02-summarize.md          ← also part of the parallel group
+└── 03-implement.md          ← waits for all of 02-* to finish
+</code></pre>
+<p>By default, ash prompts for confirmation: <em>&quot;N parallel group(s) detected. Run them in parallel? [y/N]&quot;</em>. Pass <code>--yes</code> to skip the prompt and always allow. In non-interactive mode (CI, piped stdin), parallel groups produce an error unless <code>--yes</code> is given.</p>
+<p>A file and a subdirectory with the same prefix form a combined parallel group — the file and the entire subdirectory walk run concurrently on separate threads.</p>
+<h3>Frontmatter (<code>.md</code> files)</h3>
+<p>Markdown tasks can set per-task configuration with YAML frontmatter:</p>
+<pre><code class="language-markdown">---
+agent: claude-code
+model: sonnet
+compact: truncate 32000
+on_fail: continue
+---
+
+# Task Title
+
+The prompt content for the agent goes here...
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Values</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>agent</code></td>
+<td>agent name</td>
+<td>—</td>
+<td>Override agent for this task</td>
+</tr>
+<tr>
+<td><code>model</code></td>
+<td>model name</td>
+<td>—</td>
+<td>Override model for this task</td>
+</tr>
+<tr>
+<td><code>compact</code></td>
+<td>directive</td>
+<td>—</td>
+<td>Context window strategy for this task</td>
+</tr>
+<tr>
+<td><code>on_fail</code></td>
+<td><code>stop</code>, <code>continue</code></td>
+<td><code>stop</code></td>
+<td>Behavior when the task fails</td>
+</tr>
+</tbody></table>
+<h3>Shebang (<code>.ash</code> files)</h3>
+<p>Ash scripts set their agent via shebang, same as standalone scripts:</p>
+<pre><code class="language-ash">#!opencode:1.0:sonnet
+
+do &quot;Fix the migration script&quot;
+if $? != 0 {
+  do &quot;Rollback changes&quot; with rollback-agent
+}
+</code></pre>
+<p>The shebang&#39;s engine and model become the defaults for <code>do</code> statements inside the script. Individual <code>do</code> calls can override with <code>with</code>/<code>using</code> clauses.</p>
+<h3>CLI flags</h3>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>--dry-run</code></td>
+<td>Print the task list without executing</td>
+</tr>
+<tr>
+<td><code>--continue-on-error</code> / <code>-k</code></td>
+<td>Keep running after a task fails</td>
+</tr>
+<tr>
+<td><code>--check</code> / <code>-c</code></td>
+<td>Validate syntax without executing</td>
+</tr>
+<tr>
+<td><code>--yes</code> / <code>-y</code></td>
+<td>Allow parallel execution without confirmation prompt</td>
+</tr>
+<tr>
+<td><code>--agent &lt;name&gt;:&lt;model&gt;</code></td>
+<td>Default agent and model for all tasks</td>
+</tr>
+</tbody></table>
+<h3>Skip behavior</h3>
+<p>The following files and directories are silently skipped during the walk:</p>
+<ul>
+<li>Hidden files and directories (starting with <code>.</code>)</li>
+<li>Files without a numeric prefix</li>
+<li>Non-task file extensions (not <code>.md</code> or <code>.ash</code>)</li>
+<li>Empty markdown files (no content after frontmatter)</li>
+<li>Empty ash scripts (no statements)</li>
+</ul>
+<h3>Directory orchestration inside scripts</h3>
+<p>The tree walker can also be invoked from within an ash script using <code>do @&quot;path/&quot;</code>:</p>
+<pre><code class="language-ash">do @&quot;tasks/&quot; with opencode
+</code></pre>
+<p>When the <code>@</code> path points to a directory, the same tree walker runs — walking the directory, discovering tasks, and executing them in order. See <a href="file-prompts.md">File-based Prompts</a>.</p>
+<h2>Ash Script Language</h2>
+<p>Ash scripts (<code>.ash</code>) provide a full scripting language for composing AI agents into automated workflows.</p>
+<h3>Agent calls</h3>
+<p>The <code>do</code> statement invokes an agent:</p>
+<pre><code class="language-ash">do &quot;Fix the login bug in src/auth/login.ts&quot; with opencode
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Clause</th>
+<th>Example</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>with &lt;agent&gt;</code></td>
+<td><code>with opencode</code></td>
+<td>Which agent to invoke</td>
+</tr>
+<tr>
+<td><code>using &lt;model&gt;</code></td>
+<td><code>using sonnet</code></td>
+<td>Override the AI model</td>
+</tr>
+<tr>
+<td><code>in &lt;path&gt;</code></td>
+<td><code>in &quot;/workspace&quot;</code></td>
+<td>Working directory for the agent</td>
+</tr>
+<tr>
+<td><code>compact &lt;directive&gt;</code></td>
+<td><code>compact &quot;truncate 32000&quot;</code></td>
+<td>Context management</td>
+</tr>
+</tbody></table>
+<h3>CLI flags</h3>
+<pre><code class="language-bash">ash script.ash                     # run a script
+ash tasks/                         # run directory mode
+ash --check script.ash             # validate syntax only
+ash -c script.ash                  # shorthand for --check
+ash --agent opencode:sonnet        # default agent and model
+ash tasks/ --dry-run               # preview without executing
+ash --config path/to/ash.yml      # custom config file path
+ash --continue-on-error            # keep going after task failure
+ash -k                             # shorthand for --continue-on-error
+</code></pre>
+<h2>Variables</h2>
+<p>Assign with <code>=</code> and reference by name:</p>
+<pre><code class="language-ash">NAME = &quot;world&quot;
+COUNT = 42
+MSG = &quot;hello ${NAME}&quot;
+</code></pre>
+<h3>Built-in variables</h3>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Set by</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>$?</code></td>
+<td><code>do</code>, <code>exec</code>, fn calls</td>
+<td>Exit code (0 = success)</td>
+</tr>
+<tr>
+<td><code>stdout</code></td>
+<td><code>do</code>, <code>exec</code></td>
+<td>Stdout from the last call</td>
+</tr>
+<tr>
+<td><code>stderr</code></td>
+<td><code>do</code>, <code>exec</code></td>
+<td>Stderr from the last call</td>
+</tr>
+<tr>
+<td><code>error</code></td>
+<td>eval try body failure</td>
+<td>Error message when a body statement fails</td>
+</tr>
+<tr>
+<td><code>report</code></td>
+<td>eval try evaluator block</td>
+<td>Captured <code>print</code> output from the <code>evaluate with</code> block</td>
+</tr>
+<tr>
+<td><code>$_attempt</code></td>
+<td><code>evaluate</code> body</td>
+<td>Current attempt number, 1-indexed</td>
+</tr>
+<tr>
+<td><code>$_max_attempts</code></td>
+<td><code>evaluate</code> body</td>
+<td>Total allowed attempts</td>
+</tr>
+<tr>
+<td><code>$_feedback</code></td>
+<td><code>evaluate</code> body</td>
+<td>Findings from the previous evaluation iteration</td>
+</tr>
+<tr>
+<td><code>$_evaluator_output</code></td>
+<td><code>evaluate</code> evaluator</td>
+<td>Full stdout from the evaluator</td>
+</tr>
+<tr>
+<td><code>$score</code></td>
+<td><code>evaluate</code> post-loop</td>
+<td>The final score (accepted or last attempted)</td>
+</tr>
+<tr>
+<td><code>$accepted</code></td>
+<td><code>evaluate</code> post-loop</td>
+<td>Whether the threshold was met</td>
+</tr>
+</tbody></table>
+<p>The <code>$</code> prefix is supported for backward compatibility (<code>$FILES</code>, <code>$DIFF</code>). Bare names without <code>$</code> are preferred.</p>
+<h2>Control Flow</h2>
+<p>All bodies use <code>{ }</code>:</p>
+<h3>If / else</h3>
+<pre><code class="language-ash">if $? == 0 {
+  print &quot;build passed&quot;
+} else if SCORE &gt; 0.8 {
+  print &quot;good enough&quot;
+} else {
+  print &quot;fail&quot;
+  exit 1
+}
+</code></pre>
+<h3>For loops</h3>
+<pre><code class="language-ash">for FILE in FILES {
+  exec eslint FILE
+}
+</code></pre>
+<h3>While loops</h3>
+<pre><code class="language-ash">while RETRIES &lt; 3 {
+  do &quot;Fix remaining issues&quot;
+  RETRIES = RETRIES + 1
+}
+</code></pre>
+<h3>Try blocks</h3>
+<p>Binary try — retries on failure, runs an optional fail block:</p>
+<pre><code class="language-ash">try {
+  do &quot;Deploy to staging&quot;
+} fail {
+  print &quot;deployment failed, rolling back&quot;
+} upto 3
+</code></pre>
+<h3>Evaluate blocks</h3>
+<p><code>evaluate</code> is a top-level statement that runs a body, evaluates the result using an external evaluator (agent, function, or command), and retries until a numeric score threshold is met or attempts are exhausted.</p>
+<pre><code class="language-ash">evaluate {
+  do &quot;Write a blog post about Rust&quot;
+} by @&quot;reviewer.md&quot; with opencode
+   accept by 85
+   upto 5
+</code></pre>
+<p>The <code>by</code> clause selects the evaluator — one of three forms:</p>
+<table>
+<thead>
+<tr>
+<th>Evaluator</th>
+<th>Syntax</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Agent</td>
+<td><code>@&quot;prompt.md&quot; [with &lt;agent&gt;] [using &lt;model&gt;]</code></td>
+<td>An agent reviews the output and produces a score</td>
+</tr>
+<tr>
+<td>Function</td>
+<td><code>fn_name(args...)</code></td>
+<td>A user-defined function returns the score</td>
+</tr>
+<tr>
+<td>Command</td>
+<td><code>exec &quot;&lt;command&gt;&quot;</code></td>
+<td>A shell command outputs the score</td>
+</tr>
+</tbody></table>
+<p>The agent evaluator receives language-injected scoring instructions so prompts don&#39;t need to specify the output format. The agent must output:</p>
+<pre><code>SCORE: &lt;0-100 integer&gt;
+FINDINGS:
+&lt;actionable improvement feedback&gt;
+</code></pre>
+<h4>Per-iteration variables</h4>
+<p>Within each iteration&#39;s body, these variables are automatically set:</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>$_attempt</code></td>
+<td>Int</td>
+<td>Current attempt number, 1-indexed</td>
+</tr>
+<tr>
+<td><code>$_max_attempts</code></td>
+<td>Int</td>
+<td>Total allowed attempts</td>
+</tr>
+<tr>
+<td><code>$_feedback</code></td>
+<td>String</td>
+<td>Findings from the previous iteration (empty on attempt 1)</td>
+</tr>
+</tbody></table>
+<h4>Post-loop variables</h4>
+<p>After the evaluate block completes, these variables are set in the parent scope:</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Type</th>
+<th>On acceptance</th>
+<th>On exhaustion</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>$score</code></td>
+<td>Int</td>
+<td>The accepted score (&gt;= threshold)</td>
+<td>The last attempted score</td>
+</tr>
+<tr>
+<td><code>$accepted</code></td>
+<td>Bool</td>
+<td><code>true</code></td>
+<td><code>false</code></td>
+</tr>
+<tr>
+<td><code>$_evaluator_output</code></td>
+<td>String</td>
+<td>Full evaluator stdout from the accepting run</td>
+<td>Full evaluator stdout from the last run</td>
+</tr>
+</tbody></table>
+<h4>Outcomes</h4>
+<ul>
+<li><strong>Acceptance</strong> — score &gt;= threshold on any attempt. The loop terminates immediately. Side effects from the accepting iteration are preserved.</li>
+<li><strong>Exhaustion</strong> — all attempts complete without reaching the threshold. The last iteration&#39;s side effects are preserved for inspection.</li>
+<li><strong>Error</strong> — body crash, evaluator failure, or score extraction failure propagates immediately. No silent retry.</li>
+</ul>
+<h4>Example: branching on acceptance</h4>
+<pre><code class="language-ash">evaluate {
+  do &quot;Write documentation&quot;
+} by score_fn()
+   accept by 80
+   upto 5
+
+if $accepted {
+  print &quot;Approved with score $score&quot;
+  exec deploy docs/
+} else {
+  print &quot;Rejected (score $score), check output&quot;
+  exit 1
+}
+</code></pre>
+<h2>Functions</h2>
+<pre><code class="language-ash">fn review(FILE, MODEL) {
+  do &quot;Review ${FILE}&quot; with opencode using MODEL
+}
+
+fn build() {
+  exec npm run build
+}
+</code></pre>
+<p>Call with parentheses — required for both built-in and user functions:</p>
+<pre><code class="language-ash">FILES = get_src_files()
+review(&quot;src/auth.ts&quot;, &quot;sonnet&quot;)
+build()
+</code></pre>
+<h3>Scoping</h3>
+<p>Variables created inside <code>{ }</code> are local — not visible outside. Outer variables are readable but not writable inside a function.</p>
+<p>Functions compose naturally with <code>try</code>:</p>
+<pre><code class="language-ash">fn review_files(PATTERN, MODEL) {
+  for FILE in exec find . -name PATTERN {
+    try {
+      do &quot;Review ${FILE}&quot; with opencode using MODEL
+    } fail {
+      do &quot;Fix errors: ${stderr}&quot; with opencode compact &quot;truncate 16000&quot;
+    } upto 2
+  }
+}
+</code></pre>
+<h2>Built-in Tools</h2>
+<table>
+<thead>
+<tr>
+<th>Statement</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>exec cmd</code></td>
+<td>Run a shell command</td>
+</tr>
+<tr>
+<td><code>evaluate { } by ... accept by ... upto N</code></td>
+<td>Retry body until a score threshold is met, evaluated by an agent/function/command</td>
+</tr>
+<tr>
+<td><code>use &lt;agent&gt;</code></td>
+<td>Set the default agent for subsequent <code>do</code> calls</td>
+</tr>
+<tr>
+<td><code>print msg</code></td>
+<td>Print output</td>
+</tr>
+<tr>
+<td><code>include &quot;file.ash&quot;</code></td>
+<td>Load another ash script</td>
+</tr>
+<tr>
+<td><code>env KEY</code></td>
+<td>Read an environment variable</td>
+</tr>
+<tr>
+<td><code>exit code</code></td>
+<td>Exit the script</td>
+</tr>
+<tr>
+<td><code>return [val]</code></td>
+<td>Return from a function</td>
+</tr>
+<tr>
+<td><code>break</code></td>
+<td>Exit a for/while loop</td>
+</tr>
+<tr>
+<td><code>continue</code></td>
+<td>Skip to next loop iteration</td>
+</tr>
+<tr>
+<td><code>compact &quot;directive&quot;</code></td>
+<td>Set context window strategy</td>
+</tr>
+<tr>
+<td><code>within &lt;dir&gt; { }</code></td>
+<td>Run block in a different directory</td>
+</tr>
+</tbody></table>
+<h2>Session Blocks</h2>
+<p>Keep multiple <code>do</code> calls in a shared agent session:</p>
+<pre><code class="language-ash">session {
+  do &quot;Implement the token types&quot;
+  do &quot;Implement the value system&quot;
+  do &quot;Refactor the AST&quot;
+}
+</code></pre>
+<p>A toggle form (<code>begin</code> / <code>end</code>) spans non-contiguous code without nesting:</p>
+<pre><code class="language-ash">session begin
+do &quot;Research approach&quot;
+do &quot;Draft prototype&quot;
+session end
+
+# ... intervening code ...
+
+session begin
+do &quot;Finalize implementation&quot;
+session end
+</code></pre>
+<p>Mix toggle and block forms as long as they are not nested. <code>session begin</code> errs if a session is already active. <code>session end</code> errs without a matching <code>begin</code>.</p>
+<h2>Background and Parallel Execution</h2>
+<p>Run a statement in the background with <code>&amp;</code>:</p>
+<pre><code class="language-ash">do &quot;Long running analysis&quot; &amp;
+print &quot;main continues immediately&quot;
+wait
+</code></pre>
+<p>Run multiple statements in parallel with <code>wait { }</code>:</p>
+<pre><code class="language-ash">wait {
+  do &quot;Train model A&quot;
+  do &quot;Train model B&quot;
+}
+print &quot;both models done&quot;
+</code></pre>
+<h2>File-based Prompts (<code>@file</code>)</h2>
+<p>Load a prompt from a file with variable interpolation:</p>
+<pre><code class="language-ash">do @&quot;path/to/prompt.md&quot;
+</code></pre>
+<p>The file is read, <code>${VAR}</code> placeholders are resolved, and the result is sent to the agent.</p>
+<p><code>@&lt;path&gt;</code> loads the prompt from a file relative to the script:</p>
+<pre><code class="language-ash">do @skills/refactor.md with opencode
+do @skills/review.md with opencode using sonnet
+do @&#39;play_step${n}.md&#39; with opencode
+do @${DIR}/prompts/task.md with opencode
+</code></pre>
+<h3>Directory orchestration</h3>
+<p>If the <code>@</code> path points to a <strong>directory</strong> rather than a file, the task tree walker runs instead — the same mechanism used by <code>ash tasks/</code>:</p>
+<pre><code class="language-ash">do @&quot;tasks/&quot; with opencode
+</code></pre>
+<p>This walks the directory, discovers numbered <code>.md</code> and <code>.ash</code> files, and executes them in sorted order using the specified agent. Each <code>.md</code> file becomes a standalone task sent to the agent. Each <code>.ash</code> file is executed as a script with access to the same evaluator scope.</p>
+<p>This lets scripts recursively compose task directories:</p>
+<pre><code class="language-ash">do @&quot;review/&quot; with opencode
+do @&quot;fix/&quot; with opencode using sonnet
+if $? == 0 {
+  do @&quot;deploy/&quot; with opencode
+}
+</code></pre>
+<p>Individual task files can override the agent and model via YAML frontmatter, just like in directory mode.</p>
+<h2>REPL</h2>
+<p>Run <code>ash</code> with no arguments to enter interactive mode:</p>
+<pre><code class="language-bash">$ ash
+ash&gt; NAME = &quot;world&quot;
+ash&gt; print &quot;hello ${NAME}&quot;
+hello world
+</code></pre>
+<p>Commands: <code>.help</code>, <code>.clear</code>, <code>.vars</code>, <code>.exit</code>. Up/down arrows navigate history. Multi-line blocks (<code>if</code>, <code>for</code>, <code>session</code>) auto-detect continuation.</p>
+<h2>Supported Agents</h2>
+<table>
+<thead>
+<tr>
+<th>Agent</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>echo</code></td>
+<td>Built-in passthrough for testing</td>
+</tr>
+<tr>
+<td><code>opencode</code></td>
+<td>OpenCode CLI agent</td>
+</tr>
+<tr>
+<td><code>claude-code</code></td>
+<td>Anthropic Claude Code</td>
+</tr>
+<tr>
+<td><code>aider</code></td>
+<td>Aider AI pair programming</td>
+</tr>
+</tbody></table>
+<h3>Auto-discovery</h3>
+<p>Agents are auto-discovered on your PATH. Run to refresh:</p>
+<pre><code class="language-bash">ash discover
+</code></pre>
+<h3>Custom agents</h3>
+<p>Add custom CLI-based agents in <code>ash.yml</code>:</p>
+<pre><code class="language-yaml">agents:
+  my-tool:
+    type: local-cli
+    cmd: my-tool
+    message_flag: &quot;--prompt&quot;
+    yes_flag: &quot;--yes&quot;
+</code></pre>
+<h2>Building from Source</h2>
+<pre><code class="language-bash">git clone https://github.com/kenny1125nz/ash-lang.git
+cd ash
+cargo build --release
+</code></pre>
+<p>Requirements: Rust 1.70+</p>
+<h2>License</h2>
+<p>AGPLv3</p>
+<h2>VS Code Extension</h2>
+<p>Syntax highlighting, check, and run commands for Ash (<code>.ash</code>) agent shell scripts.</p>
+<p>The extension provides language tooling only — the Ash runtime is a separate CLI. Install it via npm or download from GitHub Releases:</p>
+<pre><code class="language-sh">npm i -g @ash-lang/cli
+</code></pre>
+<h3>Features</h3>
+<ul>
+<li>Syntax highlighting for <code>.ash</code> files — variables, strings, control flow, agent calls</li>
+<li>Run script — executes the current <code>.ash</code> file with the ash runtime</li>
+<li>Check script — validates syntax without executing</li>
+</ul>
+<h3>Commands</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Title</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>ash.runScript</code></td>
+<td>Ash: Run Script</td>
+<td>Run the active <code>.ash</code> file</td>
+</tr>
+<tr>
+<td><code>ash.checkScript</code></td>
+<td>Ash: Check Script</td>
+<td>Validate syntax of the active <code>.ash</code> file</td>
+</tr>
+<tr>
+<td><code>ash.stopScript</code></td>
+<td>Ash: Stop Script</td>
+<td>Stop a running script</td>
+</tr>
+</tbody></table>
+<p>Run from the Command Palette (<code>Ctrl+Shift+P</code>) or right-click an <code>.ash</code> file in the editor.</p>
+
+</div>

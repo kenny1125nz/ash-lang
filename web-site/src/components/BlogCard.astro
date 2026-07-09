@@ -1,0 +1,20 @@
+---
+export interface Props {
+  title: string;
+  slug: string;
+  author: string;
+  published_at: string;
+}
+
+const { title, slug, author, published_at } = Astro.props;
+const formattedDate = new Date(published_at).toLocaleDateString('en-US', {
+  year: 'numeric',
+  month: 'long',
+  day: 'numeric',
+});
+---
+
+<article class="bg-bg-secondary border border-border rounded-lg p-5 hover:border-text-secondary transition-colors">
+  <a href={`/blog/${slug}`} class="text-accent-green hover:underline font-semibold text-lg block mb-1">{title}</a>
+  <p class="text-text-secondary text-sm">By {author} · <time datetime={published_at}>{formattedDate}</time></p>
+</article>
