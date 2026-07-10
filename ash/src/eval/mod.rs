@@ -100,8 +100,10 @@ pub struct Evaluator {
     pub default_model: String,
     pub session_depth: usize,
     pub within_stack: Vec<PathBuf>,
+    pub source_path: Option<PathBuf>,
     pub telemetry_ctx: Option<telemetry::context::SpanContext>,
     pub(crate) script_args: Vec<String>,
+    pub agent_hint: Option<String>,
 }
 
 impl Evaluator {
@@ -120,8 +122,10 @@ impl Evaluator {
             default_model: String::new(),
             session_depth: 0,
             within_stack: Vec::new(),
+            source_path: None,
             telemetry_ctx: None,
             script_args: Vec::new(),
+            agent_hint: None,
         }
     }
 
@@ -139,8 +143,10 @@ impl Evaluator {
             default_model: self.default_model.clone(),
             session_depth: 0,
             within_stack: Vec::new(),
+            source_path: self.source_path.clone(),
             telemetry_ctx: None,
             script_args: self.script_args.clone(),
+            agent_hint: None,
         }
     }
 
@@ -268,6 +274,7 @@ impl Evaluator {
             Value::String(s) => s.clone(),
             other => format!("{}", other),
         };
+        let cmd_str = self.resolve_exec_paths(&cmd_str);
 
         let child_ctx = self.telemetry_ctx.as_ref().map(|c| c.child());
         if let Some(ref ctx) = child_ctx {
@@ -282,7 +289,13 @@ impl Evaluator {
         } else {
             None
         };
-        let result = self.executor.run(&cmd_str)?;
+        {
+            let _ = std::io::stderr().write_all(b"> ");
+            let _ = std::io::stderr().write_all(cmd_str.as_bytes());
+            let _ = std::io::stderr().write_all(b"\n");
+            let _ = std::io::stderr().flush();
+        }
+        let result = self.executor.run_forwarded(&cmd_str)?;
         let duration_ms = start.map(|s| s.elapsed().as_millis() as u64).unwrap_or(0);
         if let Some(ref ctx) = child_ctx {
             telemetry::emit(
@@ -451,6 +464,94 @@ impl Evaluator {
         self.set_exit_code(0);
         Ok(Value::Nil)
     }
+
+    pub fn set_source_path(&mut self, path: Option<PathBuf>) {
+        self.source_path = path;
+    }
+
+    fn resolve_include_path(&self, path: &str) -> PathBuf {
+        let p = std::path::Path::new(path);
+        if p.is_absolute() {
+            return p.to_path_buf();
+        }
+        if let Some(ref sp) = self.source_path {
+            return sp.parent().unwrap().join(path);
+        }
+        p.to_path_buf()
+    }
+
+    fn resolve_exec_paths(&self, cmd: &str) -> String {
+        let mut out = String::with_capacity(cmd.len());
+        let mut chars = cmd.chars().peekable();
+        while let Some(ch) = chars.next() {
+            match ch {
+                '\'' => {
+                    out.push(ch);
+                    while let Some(&c) = chars.peek() {
+                        if c == '\'' {
+                            out.push(chars.next().unwrap());
+                            break;
+                        }
+                        out.push(chars.next().unwrap());
+                    }
+                }
+                '"' => {
+                    out.push(ch);
+                    while let Some(&c) = chars.peek() {
+                        if c == '"' {
+                            out.push(chars.next().unwrap());
+                            break;
+                        }
+                        if c == '@' {
+                            chars.next();
+                            let mut path = String::new();
+                            while let Some(&c2) = chars.peek() {
+                                if c2 == '"' || c2 == '\'' || c2 == '`' || c2.is_whitespace() {
+                                    break;
+                                }
+                                path.push(chars.next().unwrap());
+                            }
+                            if path.is_empty() {
+                                out.push('@');
+                            } else {
+                                let resolved = self.resolve_include_path(&path);
+                                out.push_str(&resolved.to_string_lossy());
+                            }
+                        } else {
+                            out.push(chars.next().unwrap());
+                        }
+                    }
+                }
+                '`' => {
+                    out.push(ch);
+                    while let Some(&c) = chars.peek() {
+                        if c == '`' {
+                            out.push(chars.next().unwrap());
+                            break;
+                        }
+                        out.push(chars.next().unwrap());
+                    }
+                }
+                '@' => {
+                    let mut path = String::new();
+                    while let Some(&c) = chars.peek() {
+                        if c == '\'' || c == '"' || c == '`' || c.is_whitespace() {
+                            break;
+                        }
+                        path.push(chars.next().unwrap());
+                    }
+                    if path.is_empty() {
+                        out.push('@');
+                    } else {
+                        let resolved = self.resolve_include_path(&path);
+                        out.push_str(&resolved.to_string_lossy());
+                    }
+                }
+                _ => out.push(ch),
+            }
+        }
+        out
+    }
 }
 
 impl TaskExecutor for Evaluator {
@@ -471,6 +572,10 @@ impl TaskExecutor for Evaluator {
 
     fn set_default_model(&mut self, name: &str) {
         Evaluator::set_default_model(self, name);
+    }
+
+    fn set_source_path(&mut self, path: Option<PathBuf>) {
+        Evaluator::set_source_path(self, path);
     }
 
     fn current_scope(&self) -> ScopeRef {
@@ -656,5 +761,77 @@ mod tests {
         assert_eq!(result, Value::Nil);
         assert_eq!(ev.default_agent, "opencode");
         assert_eq!(ev.get_var("?").unwrap(), Value::Int(0));
+    }
+
+    #[test]
+    fn test_resolve_exec_paths_unquoted() {
+        let mut ev = make_evaluator();
+        ev.source_path = Some(std::path::PathBuf::from("/project/scripts/build.ash"));
+
+        let result = ev.resolve_exec_paths("node @deploy.js");
+        assert_eq!(result, "node /project/scripts/deploy.js");
+    }
+
+    #[test]
+    fn test_resolve_exec_paths_double_quotes() {
+        let mut ev = make_evaluator();
+        ev.source_path = Some(std::path::PathBuf::from("/project/scripts/build.ash"));
+
+        let result = ev.resolve_exec_paths("cat \"@data/file.txt\"");
+        assert_eq!(result, "cat \"/project/scripts/data/file.txt\"");
+    }
+
+    #[test]
+    fn test_resolve_exec_paths_single_quotes_preserved() {
+        let mut ev = make_evaluator();
+        ev.source_path = Some(std::path::PathBuf::from("/project/scripts/build.ash"));
+
+        let result = ev.resolve_exec_paths("echo '@literal @path'");
+        assert_eq!(result, "echo '@literal @path'");
+    }
+
+    #[test]
+    fn test_resolve_exec_paths_absolute_passthrough() {
+        let mut ev = make_evaluator();
+        ev.source_path = Some(std::path::PathBuf::from("/project/scripts/build.ash"));
+
+        let result = ev.resolve_exec_paths("cat @/etc/hostname");
+        assert_eq!(result, "cat /etc/hostname");
+    }
+
+    #[test]
+    fn test_resolve_exec_paths_no_at() {
+        let mut ev = make_evaluator();
+        ev.source_path = Some(std::path::PathBuf::from("/project/scripts/build.ash"));
+
+        let result = ev.resolve_exec_paths("mkdir -p tmp && cp src/file.txt dest/");
+        assert_eq!(result, "mkdir -p tmp && cp src/file.txt dest/");
+    }
+
+    #[test]
+    fn test_resolve_exec_paths_backticks_preserved() {
+        let mut ev = make_evaluator();
+        ev.source_path = Some(std::path::PathBuf::from("/project/scripts/build.ash"));
+
+        let result = ev.resolve_exec_paths("echo `cat @file.txt`");
+        assert_eq!(result, "echo `cat @file.txt`");
+    }
+
+    #[test]
+    fn test_resolve_exec_paths_multiple_at() {
+        let mut ev = make_evaluator();
+        ev.source_path = Some(std::path::PathBuf::from("/project/scripts/build.ash"));
+
+        let result = ev.resolve_exec_paths("node @tool.js --input @data/in.json");
+        assert_eq!(result, "node /project/scripts/tool.js --input /project/scripts/data/in.json");
+    }
+
+    #[test]
+    fn test_resolve_exec_paths_no_source_path_strips_at() {
+        let ev = make_evaluator();
+        assert!(ev.source_path.is_none());
+
+        let result = ev.resolve_exec_paths("node @deploy.js");
+        assert_eq!(result, "node deploy.js");
     }
 }

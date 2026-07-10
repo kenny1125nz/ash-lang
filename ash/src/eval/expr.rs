@@ -149,7 +149,7 @@ impl Evaluator {
             .map(Value::String)
     }
 
-    fn resolve_interpolations(
+    pub(super) fn resolve_interpolations(
         &mut self,
         value: &str,
         interps: &[InterpSpan],
@@ -271,10 +271,12 @@ impl Evaluator {
                 )))
             }
         };
-        debug!("eval — reading file {}", path);
-        let content = fs::read_to_string(&path)
-            .map_err(|e| EvalError::Msg(format!("failed to read file '{}': {}", path, e)))?;
-        self.resolve_interpolations(&content, &[]).map(Value::String)
+        let resolved = self.resolve_include_path(&path);
+        debug!("eval — reading file {}", resolved.display());
+        let content = fs::read_to_string(&resolved)
+            .map_err(|e| EvalError::Msg(format!("failed to read file '{}': {}", resolved.display(), e)))?;
+        let (_fm, body) = crate::runtime::tree::parse_frontmatter(&content);
+        self.resolve_interpolations(body, &[]).map(Value::String)
     }
 
     pub(super) fn eval_fn_call(&mut self, n: &FnCall) -> Result<Value, EvalError> {
@@ -761,5 +763,68 @@ mod tests {
             Err(EvalError::Msg(s)) => assert!(s.contains("unknown function")),
             _ => panic!("expected Msg error"),
         }
+    }
+
+    #[test]
+    fn test_file_path_resolves_relative_to_source_path() {
+        let mut ev = make_evaluator();
+        let dir = std::env::temp_dir().join(format!("ash-fp-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let script_path = dir.join("script.ash");
+        let sibling_path = dir.join("sibling.md");
+        std::fs::write(&script_path, "").unwrap();
+        std::fs::write(&sibling_path, "hello from @file").unwrap();
+
+        ev.source_path = Some(script_path);
+
+        let node = Node::FilePath(FilePath {
+            pos: Pos { line: 1, col: 1 },
+            path: Box::new(string_lit("sibling.md")),
+        });
+
+        let result = ev.eval_expr(&node).unwrap();
+        assert_eq!(result, Value::String("hello from @file".to_string()));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_file_path_rejects_non_string() {
+        let mut ev = make_evaluator();
+
+        let node = Node::FilePath(FilePath {
+            pos: Pos { line: 1, col: 1 },
+            path: Box::new(int_lit(42)),
+        });
+
+        let result = ev.eval_expr(&node);
+        match result {
+            Err(EvalError::Msg(s)) => assert!(s.contains("file path must be a string"), "got: {}", s),
+            other => panic!("expected type error, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_file_path_absolute_passthrough() {
+        let mut ev = make_evaluator();
+        let dir = std::env::temp_dir().join(format!("ash-fp-abs-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let abs_path = dir.join("data.md");
+        std::fs::write(&abs_path, "absolute content").unwrap();
+
+        // Set source_path to a different dir to verify absolute still works
+        ev.source_path = Some(dir.join("script.ash"));
+
+        let node = Node::FilePath(FilePath {
+            pos: Pos { line: 1, col: 1 },
+            path: Box::new(string_lit(abs_path.to_str().unwrap())),
+        });
+
+        let result = ev.eval_expr(&node).unwrap();
+        assert_eq!(result, Value::String("absolute content".to_string()));
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

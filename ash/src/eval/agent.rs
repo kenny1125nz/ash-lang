@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::sync::Arc;
 
 use log::{debug, info};
@@ -13,36 +14,105 @@ use super::{EvalError, Evaluator, ExitError};
 
 impl Evaluator {
     pub(super) fn eval_agent_call(&mut self, n: &AgentCall) -> Result<Value, EvalError> {
-        // If the prompt is a @-prefixed path that points to a directory,
-        // run the task tree walker instead of calling an agent.
+        let mut agent_name = n
+            .agent
+            .as_deref()
+            .unwrap_or(&self.default_agent)
+            .to_string();
+
+        // Print progress hint
+        let hint = self.agent_hint.take().unwrap_or_else(|| {
+            if let Node::FilePath(fp) = &*n.prompt {
+                if let Ok(path_val) = self.eval_expr(&fp.path) {
+                    let s = match &path_val {
+                        Value::String(s) => s.clone(),
+                        other => format!("{}", other),
+                    };
+                    format!("@{}", s)
+                } else {
+                    String::new()
+                }
+            } else if let Ok(prompt_val) = self.eval_expr(&n.prompt) {
+                format!("{}", prompt_val)
+            } else {
+                String::new()
+            }
+        });
+        if !hint.is_empty() {
+            let _ = std::io::stderr().write_all(agent_name.as_bytes());
+            let _ = std::io::stderr().write_all(b": ");
+            let _ = std::io::stderr().write_all(hint.as_bytes());
+            let _ = std::io::stderr().write_all(b"\n");
+            let _ = std::io::stderr().flush();
+        }
+
+        // --- Resolve prompt and parse frontmatter ---
+        let prompt_str;
+        let model_str;
+        let mut file_fm: Option<tree::Frontmatter> = None;
+
         if let Node::FilePath(fp) = &*n.prompt {
             let path_val = self.eval_expr(&fp.path)?;
             let path_str = match &path_val {
                 Value::String(s) => s.clone(),
-                other => format!("{}", other),
+                other => {
+                    return Err(EvalError::Msg(format!(
+                        "file path must be a string, got {}",
+                        other.type_name()
+                    )))
+                }
             };
-            if let Ok(md) = std::fs::metadata(&path_str) {
+            let resolved = self.resolve_include_path(&path_str);
+            if let Ok(md) = std::fs::metadata(&resolved) {
                 if md.is_dir() {
-                    return self.eval_tree_dir(&path_str, n);
+                    let resolved_str = resolved.to_string_lossy().to_string();
+                    return self.eval_tree_dir(&resolved_str, n);
                 }
             }
-        }
+            // Read file and parse frontmatter
+            let content = std::fs::read_to_string(&resolved)
+                .map_err(|e| EvalError::Msg(format!("failed to read file '{}': {}", resolved.display(), e)))?;
+            let (fm_opt, body) = tree::parse_frontmatter(&content);
+            prompt_str = self.resolve_interpolations(body, &[])?;
+            file_fm = fm_opt;
 
-        let prompt_val = self.eval_expr(&n.prompt)?;
-        let prompt_str = match &prompt_val {
-            Value::String(s) => s.clone(),
-            other => format!("{}", other),
-        };
+            // Apply frontmatter settings (as fallback if not explicitly set in `do` call)
+            if let Some(ref fm) = file_fm {
+                if n.agent.is_none() {
+                    if let Some(ref a) = fm.agent {
+                        agent_name = a.clone();
+                    }
+                }
+            }
 
-        let model_str = if let Some(ref m) = n.model {
-            let val = self.eval_expr(m)?;
-            match &val {
+            model_str = if let Some(ref m) = n.model {
+                let val = self.eval_expr(m)?;
+                match &val {
+                    Value::String(s) => s.clone(),
+                    other => format!("{}", other),
+                }
+            } else if let Some(ref fm) = file_fm {
+                fm.model.clone().unwrap_or_else(|| self.default_model.clone())
+            } else {
+                self.default_model.clone()
+            };
+        } else {
+            let prompt_val = self.eval_expr(&n.prompt)?;
+            prompt_str = match &prompt_val {
                 Value::String(s) => s.clone(),
                 other => format!("{}", other),
-            }
-        } else {
-            self.default_model.clone()
-        };
+            };
+
+            model_str = if let Some(ref m) = n.model {
+                let val = self.eval_expr(m)?;
+                match &val {
+                    Value::String(s) => s.clone(),
+                    other => format!("{}", other),
+                }
+            } else {
+                self.default_model.clone()
+            };
+        }
 
         let dir_str = if let Some(ref d) = n.dir {
             let val = self.eval_expr(d)?;
@@ -67,12 +137,6 @@ impl Evaluator {
             session: self.session_depth > 0,
             yes: false,
         };
-
-        let agent_name = n
-            .agent
-            .as_deref()
-            .unwrap_or(&self.default_agent)
-            .to_string();
 
         info!("agent — calling {} with agent {}", agent_name, agent_name);
         debug!("agent — prompt: {} chars", prompt_str.len());
@@ -159,6 +223,12 @@ impl Evaluator {
             if let Ok(compact_val) = self.eval_expr(compact) {
                 let s = format!("{}", compact_val);
                 if let Ok(d) = crate::runtime::compact::Directive::parse(&s) {
+                    d.apply(&mut self.compact_config);
+                }
+            }
+        } else if let Some(ref fm) = file_fm {
+            if let Some(ref c) = fm.compact {
+                if let Ok(d) = crate::runtime::compact::Directive::parse(c) {
                     d.apply(&mut self.compact_config);
                 }
             }
@@ -504,6 +574,11 @@ impl Evaluator {
                 )));
             }
 
+            {
+                let _ = write!(std::io::stderr(), "score: {}/{}\n", score, threshold);
+                let _ = std::io::stderr().flush();
+            }
+
             last_evaluator_output = evaluator_output.clone();
             self.set_var("_evaluator_output", Value::String(evaluator_output.clone()))?;
 
@@ -534,6 +609,18 @@ impl Evaluator {
     ) -> Result<(String, Value), EvalError> {
         match evaluator {
             EvaluateEvaluator::Agent(agent_call) => {
+                let hint = if let Node::FilePath(fp) = &*agent_call.prompt {
+                    match self.eval_expr(&fp.path) {
+                        Ok(Value::String(s)) => format!("@{}", s),
+                        _ => String::new(),
+                    }
+                } else {
+                    match self.eval_expr(&agent_call.prompt) {
+                        Ok(val) => format!("{}", val),
+                        _ => String::new(),
+                    }
+                };
+                self.agent_hint = Some(hint);
                 let augmented = self.augment_evaluator_prompt(agent_call, attempt)?;
                 let mut modified = agent_call.clone();
                 modified.prompt = Box::new(Node::StringLiteral(StringLiteral {

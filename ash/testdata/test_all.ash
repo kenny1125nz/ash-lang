@@ -14,7 +14,7 @@
 #   bash ash/testdata/test_cli.sh
 # ============================================================================
 
-include "testdata/lang_tests.ash"
-include "testdata/agent_tests.ash"
+include "lang_tests.ash"
+include "agent_tests.ash"
 
 exit 0

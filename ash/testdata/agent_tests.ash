@@ -421,20 +421,20 @@ session {
 print "=== 43. @file interpolation — undefined variables preserved ==="
 VAR1 = "hello"
 # VAR2 intentionally not set — should stay as ${VAR2}
-do @"testdata/prompt.md"
+do @"prompt.md"
 print "  preserved: ${stdout}"
 
 print "=== 44. @file interpolation — multiple variables ==="
 VAR1 = "hello"
 VAR2 = "world"
-do @"testdata/prompt.md"
+do @"prompt.md"
 print "  resolved: ${stdout}"
 
 print "=== 45. Session with @file prompt ==="
 VAR1 = "inside"
 VAR2 = "session"
 session {
-  do @"testdata/prompt.md"
+do @"prompt.md"
   print "  resolved: ${stdout}"
 }
 
@@ -654,3 +654,109 @@ try {
   print "  fail: report=${report}"
 } upto 2
 print "  done"
+
+# ---------------------------------------------------------------------------
+# 64. Evaluate with function evaluator — accept path
+# ---------------------------------------------------------------------------
+print "=== 64. Evaluate with function evaluator (accept) ==="
+fn perfect() {
+  return 95
+}
+
+evaluate { } by perfect() accept by 90 upto 3
+
+if $accepted {
+  print "  accepted with score ${score}"
+} else {
+  print "  FAIL: should have accepted"
+}
+
+# ---------------------------------------------------------------------------
+# 65. Evaluate with function evaluator — exhaust path
+# ---------------------------------------------------------------------------
+print "=== 65. Evaluate with function evaluator (exhaust) ==="
+fn poor() {
+  return 40
+}
+
+evaluate { } by poor() accept by 80 upto 3
+
+if $accepted {
+  print "  FAIL: should have exhausted"
+} else {
+  print "  exhausted with score ${score}"
+}
+
+# ---------------------------------------------------------------------------
+# 66. Evaluate with exec evaluator — accept
+# ---------------------------------------------------------------------------
+print "=== 66. Evaluate with exec evaluator (accept) ==="
+evaluate { } by exec "echo 'SCORE: 88'" accept by 85 upto 2
+
+if $accepted {
+  print "  accepted with score ${score}"
+} else {
+  print "  FAIL: should have accepted"
+}
+
+# ---------------------------------------------------------------------------
+# 67. Evaluate with exec evaluator — exhaust
+# ---------------------------------------------------------------------------
+print "=== 67. Evaluate with exec evaluator (exhaust) ==="
+evaluate { } by exec "echo 'SCORE: 40'" accept by 85 upto 3
+
+if $accepted {
+  print "  FAIL: should have exhausted"
+} else {
+  print "  exhausted with score ${score}"
+}
+
+# ---------------------------------------------------------------------------
+# 68. Evaluate — per-iteration $_attempt visible in body
+# ---------------------------------------------------------------------------
+print "=== 68. Evaluate per-iteration variables ==="
+fn accept_third() {
+  return 95
+}
+
+evaluate {
+  print "  attempt ${_attempt}/${_max_attempts}"
+} by accept_third() accept by 90 upto 3
+
+if $accepted {
+  print "  accepted with score ${score}"
+} else {
+  print "  FAIL: should have accepted"
+}
+
+# ---------------------------------------------------------------------------
+# 69. Evaluate — $_feedback carries findings across iterations
+# ---------------------------------------------------------------------------
+print "=== 69. Evaluate feedback propagation ==="
+evaluate {
+  if $_attempt > 1 and len($_feedback) > 0 {
+    print "  attempt ${_attempt}: feedback received"
+  } else {
+    print "  attempt ${_attempt}: no feedback yet"
+  }
+} by exec "printf 'SCORE: 50\nFINDINGS:\nimprove quality\n'"
+   accept by 80
+   upto 3
+
+print "  score=${score} accepted=${accepted}"
+
+# ---------------------------------------------------------------------------
+# 70. Evaluate — $accepted false on exhaustion, true on accept
+# ---------------------------------------------------------------------------
+print "=== 70. Evaluate $accepted branching ==="
+fn borderline() {
+  return 75
+}
+
+evaluate { } by borderline() accept by 80 upto 2
+
+if $accepted {
+  print "  FAIL: should not have accepted (score ${score} < 80)"
+} else {
+  print "  correctly rejected (score ${score})"
+}

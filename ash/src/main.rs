@@ -301,6 +301,12 @@ fn run() -> i32 {
         return code;
     }
 
+    if args.len() > 1 && (args[1] == "--version" || args[1] == "-V") {
+        println!("ash {}", env!("CARGO_PKG_VERSION"));
+        ash::telemetry::shutdown();
+        return 0;
+    }
+
     let mut check_only = false;
     let mut dry_run = false;
     let mut continue_on_error = false;
@@ -391,6 +397,10 @@ fn run() -> i32 {
         if !shebang.model.is_empty() {
             eval.set_default_model(&shebang.model);
         }
+    }
+
+    if !positional.is_empty() {
+        eval.source_path = Some(std::path::PathBuf::from(&positional[0]));
     }
 
     let exit_code = match eval.eval_script(&script) {

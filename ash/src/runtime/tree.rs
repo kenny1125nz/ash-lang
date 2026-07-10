@@ -93,6 +93,7 @@ pub trait TaskExecutor: Send + Sync {
     fn eval_script(&mut self, script: &Script) -> Result<(), ExecError>;
     fn set_default_agent(&mut self, name: &str);
     fn set_default_model(&mut self, name: &str);
+    fn set_source_path(&mut self, path: Option<PathBuf>);
     fn current_scope(&self) -> ScopeRef;
 }
 
@@ -128,7 +129,7 @@ fn is_hidden(name: &str) -> bool {
     name.starts_with('.')
 }
 
-fn parse_frontmatter(content: &str) -> (Option<Frontmatter>, &str) {
+pub fn parse_frontmatter(content: &str) -> (Option<Frontmatter>, &str) {
     let trimmed = content.trim_start();
     if !trimmed.starts_with("---") {
         return (None, content);
@@ -152,11 +153,11 @@ fn parse_frontmatter(content: &str) -> (Option<Frontmatter>, &str) {
 }
 
 #[derive(Debug, Clone, Default)]
-struct Frontmatter {
-    agent: Option<String>,
-    model: Option<String>,
-    compact: Option<String>,
-    on_fail: Option<String>,
+pub struct Frontmatter {
+    pub agent: Option<String>,
+    pub model: Option<String>,
+    pub compact: Option<String>,
+    pub on_fail: Option<String>,
 }
 
 fn parse_frontmatter_lines(block: &str) -> Frontmatter {
@@ -458,7 +459,9 @@ fn execute_ash_task(task: &Task, _config: &WalkConfig, eval: &mut dyn TaskExecut
         }
     }
 
-    match eval.eval_script(&script) {
+    eval.set_source_path(Some(task.path.clone()));
+
+    let result = match eval.eval_script(&script) {
         Ok(()) => {
             eprintln!("  [ok]");
             true
@@ -475,7 +478,11 @@ fn execute_ash_task(task: &Task, _config: &WalkConfig, eval: &mut dyn TaskExecut
             eprintln!("  [fail] {}", e);
             false
         }
-    }
+    };
+
+    eval.set_source_path(None);
+
+    result
 }
 
 fn execute_task(task: &Task, config: &WalkConfig, eval: &mut dyn TaskExecutor) -> bool {

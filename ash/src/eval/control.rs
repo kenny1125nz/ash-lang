@@ -123,16 +123,22 @@ impl Evaluator {
             other => format!("{}", other),
         };
 
-        debug!("eval — include file {}", path);
-        let src = fs::read_to_string(&path)
-            .map_err(|e| EvalError::Msg(format!("include: failed to read '{}': {}", path, e)))?;
+        let resolved = self.resolve_include_path(&path);
+        debug!("eval — include file {}", resolved.display());
+        let src = fs::read_to_string(&resolved)
+            .map_err(|e| EvalError::Msg(format!("include: failed to read '{}': {}", resolved.display(), e)))?;
 
         let script = crate::lang::parser::parse_str(&src)
             .map_err(|e| EvalError::Msg(format!("include: parse error: {}", e)))?;
 
+        let saved_source = self.source_path.clone();
+        self.source_path = Some(resolved);
+
         for stmt in script.body {
             self.eval_statement(&stmt)?;
         }
+
+        self.source_path = saved_source;
 
         self.set_exit_code(0);
         Ok(Value::Nil)
@@ -142,6 +148,7 @@ impl Evaluator {
 #[cfg(test)]
 mod tests {
     use std::io::Write;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Arc;
 
     use super::super::*;
@@ -400,5 +407,179 @@ mod tests {
         assert_eq!(output, "42\n");
 
         let _ = std::fs::remove_file(&path);
+    }
+
+    static TEST_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    fn unique_temp_dir() -> std::path::PathBuf {
+        let id = TEST_DIR_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let dir = std::env::temp_dir().join(format!("ash-test-{}-{}", std::process::id(), id));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn test_include_sibling_resolves_via_source_path() {
+        let mut ev = make_evaluator();
+        let dir = unique_temp_dir();
+        let main_path = dir.join("main.ash");
+        let sibling_path = dir.join("sibling.ash");
+
+        std::fs::write(&main_path, "include \"sibling.ash\"").unwrap();
+        std::fs::write(&sibling_path, "print \"hello from sibling\"").unwrap();
+
+        ev.source_path = Some(main_path.clone());
+
+        let buf = Arc::new(std::sync::Mutex::new(Vec::new()));
+        ev.stdout = shared_writer(buf.clone());
+
+        let stmt = include_node(string_lit("sibling.ash"));
+        ev.eval_statement(&stmt).unwrap();
+
+        let output = String::from_utf8(lock_guard(&buf).clone()).unwrap();
+        assert_eq!(output, "hello from sibling\n");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_include_absolute_passthrough() {
+        let mut ev = make_evaluator();
+        let dir = unique_temp_dir();
+        let script_path = dir.join("script.ash");
+
+        std::fs::write(&script_path, "print \"direct\"").unwrap();
+
+        ev.source_path = Some(dir.join("other.ash"));
+
+        let buf = Arc::new(std::sync::Mutex::new(Vec::new()));
+        ev.stdout = shared_writer(buf.clone());
+
+        let stmt = include_node(string_lit(script_path.to_str().unwrap()));
+        ev.eval_statement(&stmt).unwrap();
+
+        let output = String::from_utf8(lock_guard(&buf).clone()).unwrap();
+        assert_eq!(output, "direct\n");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_include_nested_resolves_relative_to_included() {
+        let mut ev = make_evaluator();
+        let dir = unique_temp_dir();
+        let subdir = dir.join("sub");
+        std::fs::create_dir_all(&subdir).unwrap();
+
+        let main_path = dir.join("main.ash");
+        let included_path = subdir.join("included.ash");
+        let sibling_path = subdir.join("sibling.ash");
+
+        std::fs::write(&main_path, "include \"sub/included.ash\"").unwrap();
+        std::fs::write(&included_path, "include \"sibling.ash\"").unwrap();
+        std::fs::write(&sibling_path, "print \"nested ok\"").unwrap();
+
+        ev.source_path = Some(main_path);
+
+        let buf = Arc::new(std::sync::Mutex::new(Vec::new()));
+        ev.stdout = shared_writer(buf.clone());
+
+        let stmt = include_node(string_lit("sub/included.ash"));
+        ev.eval_statement(&stmt).unwrap();
+
+        let output = String::from_utf8(lock_guard(&buf).clone()).unwrap();
+        assert_eq!(output, "nested ok\n");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_include_source_path_restored_after_nested() {
+        let mut ev = make_evaluator();
+        let dir = unique_temp_dir();
+        let subdir = dir.join("sub");
+        std::fs::create_dir_all(&subdir).unwrap();
+
+        let main_path = dir.join("main.ash");
+        let included_path = subdir.join("included.ash");
+
+        std::fs::write(&main_path, "include \"sub/included.ash\"").unwrap();
+        std::fs::write(&included_path, "print \"included\"").unwrap();
+
+        ev.source_path = Some(main_path.clone());
+
+        let buf = Arc::new(std::sync::Mutex::new(Vec::new()));
+        ev.stdout = shared_writer(buf.clone());
+
+        let stmt = include_node(string_lit("sub/included.ash"));
+        ev.eval_statement(&stmt).unwrap();
+
+        assert_eq!(ev.source_path, Some(main_path));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_include_no_source_path_uses_cwd() {
+        let mut ev = make_evaluator();
+        let dir = unique_temp_dir();
+        let sibling_path = dir.join("sibling.ash");
+
+        std::fs::write(&sibling_path, "print \"cwd sibling\"").unwrap();
+
+        // source_path is None — resolves relative to CWD
+        assert!(ev.source_path.is_none());
+
+        // Write sibling to CWD (temp_dir) as well
+        let cwd_sibling = std::env::temp_dir().join("sibling.ash");
+        std::fs::write(&cwd_sibling, "print \"cwd ok\"").unwrap();
+
+        let orig_cwd = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&dir).unwrap();
+
+        let buf = Arc::new(std::sync::Mutex::new(Vec::new()));
+        ev.stdout = shared_writer(buf.clone());
+
+        let stmt = include_node(string_lit("sibling.ash"));
+        ev.eval_statement(&stmt).unwrap();
+
+        let output = String::from_utf8(lock_guard(&buf).clone()).unwrap();
+        assert_eq!(output, "cwd sibling\n");
+
+        std::env::set_current_dir(&orig_cwd).unwrap();
+        let _ = std::fs::remove_file(&cwd_sibling);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_include_deeply_nested_three_levels() {
+        let mut ev = make_evaluator();
+        let dir = unique_temp_dir();
+        let sub = dir.join("sub");
+        let subsub = sub.join("subsub");
+        std::fs::create_dir_all(&subsub).unwrap();
+
+        let main_path = dir.join("main.ash");
+        let a_path = sub.join("a.ash");
+        let b_path = subsub.join("b.ash");
+        let c_path = subsub.join("sibling.ash");
+
+        std::fs::write(&main_path, "include \"sub/a.ash\"").unwrap();
+        std::fs::write(&a_path, "include \"subsub/b.ash\"").unwrap();
+        std::fs::write(&b_path, "include \"sibling.ash\"").unwrap();
+        std::fs::write(&c_path, "print \"deep ok\"").unwrap();
+
+        ev.source_path = Some(main_path);
+
+        let buf = Arc::new(std::sync::Mutex::new(Vec::new()));
+        ev.stdout = shared_writer(buf.clone());
+
+        let stmt = include_node(string_lit("sub/a.ash"));
+        ev.eval_statement(&stmt).unwrap();
+
+        let output = String::from_utf8(lock_guard(&buf).clone()).unwrap();
+        assert_eq!(output, "deep ok\n");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
