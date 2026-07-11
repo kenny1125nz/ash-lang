@@ -56,6 +56,7 @@ pub struct WalkConfig {
     pub default_agent: String,
     pub default_model: String,
     pub parallel: ParallelMode,
+    pub session: bool,
 }
 
 impl Default for WalkConfig {
@@ -67,6 +68,7 @@ impl Default for WalkConfig {
             default_agent: "echo".to_string(),
             default_model: String::new(),
             parallel: ParallelMode::Prompt,
+            session: false,
         }
     }
 }
@@ -420,7 +422,7 @@ fn execute_md_task(task: &Task, config: &WalkConfig, eval: &mut dyn TaskExecutor
         prompt,
         model: model.to_string(),
         dir: String::new(),
-        session: false,
+        session: config.session,
         yes: false,
     };
 

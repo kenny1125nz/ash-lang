@@ -14,6 +14,7 @@ use super::{EvalError, Evaluator, ExitError};
 
 impl Evaluator {
     pub(super) fn eval_agent_call(&mut self, n: &AgentCall) -> Result<Value, EvalError> {
+        self.check_control_state()?;
         let mut agent_name = n
             .agent
             .as_deref()
@@ -192,6 +193,7 @@ impl Evaluator {
         };
         let duration_ms = start.map(|s| s.elapsed().as_millis() as u64).unwrap_or(0);
 
+        self.check_control_state()?;
         if let Some(ref ctx) = child_ctx {
             let mut payload = serde_json::json!({
                 "agent": agent_name,
@@ -279,6 +281,7 @@ impl Evaluator {
             default_agent: agent_name,
             default_model: model_str,
             parallel: ParallelMode::Prompt,
+            session: false,
         };
 
         let exit_code = tree::run_tree(config, self);

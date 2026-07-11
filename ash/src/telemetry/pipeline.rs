@@ -1,18 +1,15 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufWriter, Write};
-use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant};
 
 use crate::util::lock_guard;
 use crate::AshError;
 use super::config::TelemetryConfig;
 use super::event::TelemetryEvent;
 use super::filter::Filter;
-use super::offset;
-use super::store::FileStore;
 
 pub struct Pipeline {
     writer: Mutex<BufWriter<File>>,
@@ -23,13 +20,17 @@ pub struct Pipeline {
     max_files: u32,
     current_size: Mutex<u64>,
     pub capture_payload: bool,
-    // Optional remote consumer
-    remote_running: Option<Arc<AtomicBool>>,
-    remote_handle: Option<thread::JoinHandle<()>>,
+    ws_tx: Option<mpsc::SyncSender<String>>,
+    ws_shutdown: Option<Arc<AtomicBool>>,
+    ws_handle: Option<thread::JoinHandle<()>>,
 }
 
 impl Pipeline {
-    pub fn start(config: &TelemetryConfig) -> Result<Self, AshError> {
+    pub fn start(
+        config: &TelemetryConfig,
+        ws_tx: Option<mpsc::SyncSender<String>>,
+        ws_shutdown: Option<Arc<AtomicBool>>,
+    ) -> Result<Self, AshError> {
         let filter = Arc::new(Filter::new(config.filter.as_deref()));
         let file_cfg = config
             .file
@@ -38,7 +39,6 @@ impl Pipeline {
         let path = std::path::PathBuf::from(&file_cfg.path);
         let capture_payload = filter.capture_payload;
 
-        // Create parent dir if needed
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|e| AshError::Msg(format!("create dir: {}", e)))?;
         }
@@ -51,9 +51,6 @@ impl Pipeline {
 
         let current_size = file.metadata().map(|m| m.len()).unwrap_or(0);
 
-        // Spawn remote consumer thread if a remote adapter is enabled
-        let (remote_running, remote_handle) = spawn_remote_consumer(config, &path, &filter)?;
-
         Ok(Pipeline {
             writer: Mutex::new(BufWriter::new(file)),
             filter,
@@ -62,9 +59,14 @@ impl Pipeline {
             max_files: file_cfg.max_files,
             current_size: Mutex::new(current_size),
             capture_payload,
-            remote_running,
-            remote_handle,
+            ws_tx,
+            ws_shutdown,
+            ws_handle: None,
         })
+    }
+
+    pub fn set_ws_handle(&mut self, handle: thread::JoinHandle<()>) {
+        self.ws_handle = Some(handle);
     }
 
     pub fn emit(&self, event: TelemetryEvent) {
@@ -87,6 +89,10 @@ impl Pipeline {
             drop(size);
             self.rotate();
         }
+
+        if let Some(ref tx) = self.ws_tx {
+            let _ = tx.try_send(json);
+        }
     }
 
     fn rotate(&self) {
@@ -103,105 +109,13 @@ impl Pipeline {
 
 impl Drop for Pipeline {
     fn drop(&mut self) {
-        if let Some(ref r) = self.remote_running {
-            r.store(false, Ordering::Relaxed);
+        if let Some(ref shutdown) = self.ws_shutdown {
+            shutdown.store(true, Ordering::Relaxed);
         }
-        if let Some(h) = self.remote_handle.take() {
+        drop(self.ws_tx.take());
+        if let Some(h) = self.ws_handle.take() {
             let _ = h.join();
         }
         let _ = lock_guard(&self.writer).flush();
     }
-}
-
-fn spawn_remote_consumer(
-    config: &TelemetryConfig,
-    event_path: &Path,
-    global_filter: &Arc<Filter>,
-) -> Result<(Option<Arc<AtomicBool>>, Option<thread::JoinHandle<()>>), AshError> {
-    // Find the single enabled remote adapter (kafka, splunk, etc.)
-    let remote_config = if let Some(ref k) = config.kafka {
-        if k.enabled { Some(k) } else { None }
-    } else if let Some(ref s) = config.splunk {
-        if s.enabled { Some(s) } else { None }
-    } else {
-        None
-    };
-
-    let remote_config = match remote_config {
-        Some(c) => c.clone(),
-        None => return Ok((None, None)),
-    };
-
-    let remote_filter = Arc::new(Filter::new(remote_config.filter.as_deref()));
-    let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
-    let path = event_path.to_path_buf();
-    let interval = Duration::from_millis(remote_config.flush_interval_ms);
-    let batch_size = remote_config.batch_size;
-    let gf = Arc::clone(global_filter);
-
-    let handle = thread::spawn(move || {
-        let mut batch: Vec<TelemetryEvent> = Vec::new();
-        let mut last_flush = Instant::now();
-
-        while r.load(Ordering::Relaxed) {
-            let start_offset = offset::load_offset(&path);
-            let store = FileStore::new(&path);
-            let mut reader = match store.reader(start_offset) {
-                Ok(r) => r,
-                Err(_) => {
-                    thread::sleep(interval);
-                    continue;
-                }
-            };
-
-            loop {
-                match reader.read_line() {
-                    Ok(Some(event)) => {
-                        // Apply global filter (events that got written to file
-                        // already passed the global filter, but be safe)
-                        if !gf.accept(&event) {
-                            continue;
-                        }
-                        // Apply remote-specific secondary filter
-                        if remote_filter.accept(&event) {
-                            batch.push(event);
-                        }
-                        if batch.len() >= batch_size {
-                            // attempt delivery — override in real impls
-                            let ok = deliver_remote(&batch);
-                            if ok {
-                                offset::save_offset(&path, reader.position());
-                                batch.clear();
-                                last_flush = Instant::now();
-                            } else {
-                                break; // retry next tick
-                            }
-                        }
-                    }
-                    Ok(None) => break, // EOF
-                    Err(_) => break,
-                }
-            }
-
-            // Flush remaining on timer
-            if !batch.is_empty() && last_flush.elapsed() >= interval {
-                let ok = deliver_remote(&batch);
-                if ok {
-                    offset::save_offset(&path, reader.position());
-                    batch.clear();
-                }
-                last_flush = Instant::now();
-            }
-
-            thread::sleep(interval);
-        }
-    });
-
-    Ok((Some(running), Some(handle)))
-}
-
-/// Placeholder delivery — replace with kafka/splunk/etc impls later.
-fn deliver_remote(_batch: &[TelemetryEvent]) -> bool {
-    true
 }

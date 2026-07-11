@@ -786,8 +786,9 @@ impl Parser {
             let line_text = self.source.lines()
                 .nth(tok.line - 1)
                 .unwrap_or("");
-            let after_exec = &line_text[tok.col.saturating_sub(1).min(line_text.len())..];
-            after_exec.trim().to_string()
+            let exec_start = tok.col.saturating_sub(1).min(line_text.len());
+            let after_exec = line_text[exec_start..].trim_start();
+            after_exec[tok.literal.len()..].trim_start().to_string()
         };
 
         while self.pos < self.tokens.len() {

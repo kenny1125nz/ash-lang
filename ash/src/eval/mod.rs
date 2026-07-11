@@ -7,8 +7,11 @@ pub mod scope;
 use std::fmt;
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
 
 use crate::util::lock_guard;
 
@@ -104,6 +107,7 @@ pub struct Evaluator {
     pub telemetry_ctx: Option<telemetry::context::SpanContext>,
     pub(crate) script_args: Vec<String>,
     pub agent_hint: Option<String>,
+    pub control_state: Arc<AtomicU8>,
 }
 
 impl Evaluator {
@@ -126,6 +130,7 @@ impl Evaluator {
             telemetry_ctx: None,
             script_args: Vec::new(),
             agent_hint: None,
+            control_state: telemetry::control_state(),
         }
     }
 
@@ -147,6 +152,7 @@ impl Evaluator {
             telemetry_ctx: None,
             script_args: self.script_args.clone(),
             agent_hint: None,
+            control_state: self.control_state.clone(),
         }
     }
 
@@ -162,9 +168,31 @@ impl Evaluator {
         self.script_args = args;
     }
 
+    fn check_control_state(&self) -> Result<(), EvalError> {
+        match self.control_state.load(Ordering::Relaxed) {
+            telemetry::STATE_ABORT => {
+                Err(EvalError::Msg("aborted by ashd".into()))
+            }
+            telemetry::STATE_PAUSED => {
+                loop {
+                    thread::sleep(Duration::from_millis(100));
+                    match self.control_state.load(Ordering::Relaxed) {
+                        telemetry::STATE_ABORT => {
+                            return Err(EvalError::Msg("aborted by ashd".into()));
+                        }
+                        telemetry::STATE_NORMAL => return Ok(()),
+                        _ => {}
+                    }
+                }
+            }
+            _ => Ok(()),
+        }
+    }
+
     // --- Public API ---
 
     pub fn eval_script(&mut self, script: &Script) -> Result<(), EvalError> {
+        self.check_control_state()?;
         info!("engine — evaluating script ({} statements)", script.body.len());
 
         if self.telemetry_ctx.is_none() && telemetry::is_enabled() {
@@ -228,6 +256,7 @@ impl Evaluator {
     // --- Statement dispatch ---
 
     pub fn eval_statement(&mut self, node: &Node) -> Result<Value, EvalError> {
+        self.check_control_state()?;
         match node {
             Node::Print(n) => self.eval_print(n),
             Node::Exit(n) => self.eval_exit(n),
@@ -269,6 +298,7 @@ impl Evaluator {
     }
 
     pub(super) fn eval_exec(&mut self, n: &Exec) -> Result<Value, EvalError> {
+        self.check_control_state()?;
         let cmd_val = self.eval_expr(&n.cmd)?;
         let cmd_str = match &cmd_val {
             Value::String(s) => s.clone(),
@@ -310,6 +340,7 @@ impl Evaluator {
                 }),
             );
         }
+        self.check_control_state()?;
         {
             let mut scope = lock_guard(&self.current_scope);
             scope.set_local("?", Value::Int(result.exit_code as i64));

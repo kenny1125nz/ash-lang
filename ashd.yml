@@ -1,0 +1,23 @@
+daemon:
+  log_level: debug
+  ws_listen: "127.0.0.1:9877"
+  grace_period_secs: 30
+
+sources:
+  - type: folder
+    name: watch-invoices
+    path: /tmp/ashd-test/incoming
+    concurrency: parallel
+    workflows:
+      - path: ./workflows/process-invoice
+        flags: ["--agent", "opencode:sonnet", "--yes"]
+
+# telemetry_relay:
+#   kafka:
+#     enabled: true
+#     brokers: ["localhost:9092"]
+#     topic: ash-events
+#   splunk:
+#     enabled: false
+#     endpoint: "https://splunk.example.com:8088/services/collector"
+#     token: "${SPLUNK_HEC_TOKEN}"

@@ -292,6 +292,10 @@ fn run() -> i32 {
     let _ = ash::log::init();
     info!("engine — starting up");
 
+    let instance_id = std::env::var("ASH_EVENT_ID")
+        .unwrap_or_else(|_| uuid::Uuid::new_v4().to_string());
+    ash::telemetry::set_instance_id(instance_id);
+
     let args: Vec<String> = std::env::args().collect();
 
     if args.len() > 1 && args[1] == "discover" {
@@ -311,6 +315,7 @@ fn run() -> i32 {
     let mut dry_run = false;
     let mut continue_on_error = false;
     let mut yes_mode = false;
+    let mut session_mode = false;
     let mut agent_spec: Option<String> = None;
     let mut config_override: Option<String> = None;
     let mut positional: Vec<String> = Vec::new();
@@ -322,6 +327,7 @@ fn run() -> i32 {
             "--dry-run" => dry_run = true,
             "--continue-on-error" | "-k" => continue_on_error = true,
             "--yes" | "-y" => yes_mode = true,
+            "--session" | "-S" => session_mode = true,
             "--agent" => {
                 if i + 1 < args.len() {
                     i += 1;
@@ -341,6 +347,10 @@ fn run() -> i32 {
 
     let (default_agent, default_model) = parse_agent_spec(agent_spec.as_deref());
 
+    if let Some(path) = positional.first() {
+        ash::telemetry::set_workflow_path(path.clone());
+    }
+
     if !positional.is_empty() {
         let path = std::path::Path::new(&positional[0]);
         if path.is_dir() {
@@ -353,6 +363,7 @@ fn run() -> i32 {
                 default_agent,
                 default_model,
                 parallel: if yes_mode { ParallelMode::Allow } else { ParallelMode::Prompt },
+                session: session_mode,
             }, &mut eval);
             ash::telemetry::shutdown();
             return code;

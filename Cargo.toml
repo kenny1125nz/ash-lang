@@ -1,0 +1,3 @@
+[workspace]
+members = ["ash", "ash-wasm", "ashd"]
+resolver = "2"
