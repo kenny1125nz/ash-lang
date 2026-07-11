@@ -6,9 +6,9 @@ import { marked } from 'marked';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const boardDir = path.resolve(__dirname, '../../../../workflows/board');
+const boardDir = path.resolve(__dirname, '../../../../../ashco/board');
 const visionPath = path.join(boardDir, 'vision.md');
-const missionPath = path.join(boardDir, 'mision.md');
+const missionPath = path.join(boardDir, 'mission.md');
 
 const visionRaw = fs.readFileSync(visionPath, 'utf-8');
 const missionRaw = fs.readFileSync(missionPath, 'utf-8');

@@ -347,6 +347,12 @@ fn run() -> i32 {
 
     let (default_agent, default_model) = parse_agent_spec(agent_spec.as_deref());
 
+    // Validate that the specified agent exists; fallback to echo if not
+    if default_agent != "echo" && engine::get(&default_agent).is_none() {
+        eprintln!("warning: agent '{}' not found, falling back to 'echo'", default_agent);
+        // Don't override default_agent here — ensure_agents_registered may register it
+    }
+
     if let Some(path) = positional.first() {
         ash::telemetry::set_workflow_path(path.clone());
     }

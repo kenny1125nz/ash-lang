@@ -3,7 +3,7 @@
   "version": "0.0.0-dev",
   "description": "Ash CLI — multi-agent orchestration",
   "bin": {
-    "ash": "./ash"
+    "ash": "./ash.js"
   },
   "scripts": {
     "postinstall": "node postinstall.js"

@@ -183,9 +183,14 @@ pub fn discovery_summary(result: &DiscoveryResult) -> String {
 // --- Helpers ---
 
 fn which(name: &str) -> Option<String> {
-    let output = Command::new("which").arg(name).output().ok()?;
+    let cmd = if cfg!(target_os = "windows") {
+        "where"
+    } else {
+        "which"
+    };
+    let output = Command::new(cmd).arg(name).output().ok()?;
     if output.status.success() {
-        Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+        Some(String::from_utf8_lossy(&output.stdout).trim().lines().next().unwrap_or("").to_string())
     } else {
         None
     }
